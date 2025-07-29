@@ -1,0 +1,54 @@
+[package]
+name = "unwind-diff"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+# CLI and configuration
+clap = { workspace = true, features = ["derive", "env"] }
+eyre.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+# Reth core dependencies
+reth-cli.workspace = true
+reth-cli-runner.workspace = true
+reth-cli-util.workspace = true
+reth-node-core.workspace = true
+reth-node-builder.workspace = true
+reth-provider.workspace = true
+reth-primitives.workspace = true
+reth-db.workspace = true
+reth-db-api.workspace = true
+reth-db-common.workspace = true
+reth-static-file.workspace = true
+reth-network-p2p.workspace = true
+reth-node-api.workspace = true
+reth-primitives-traits.workspace = true
+reth-stages.workspace = true
+reth-stages-api.workspace = true
+reth-consensus = { workspace = true, features = ["test-utils"] }
+reth-evm.workspace = true
+reth-config.workspace = true
+reth-prune-types.workspace = true
+reth-exex-types.workspace = true
+reth-exex.workspace = true
+reth-tracing.workspace = true
+reth-downloaders.workspace = true
+
+# Ethereum specific
+reth-ethereum = { workspace = true, features = ["node", "provider"] }
+reth-ethereum-cli.workspace = true
+
+
+# Alloy
+alloy-primitives.workspace = true
+alloy-eips.workspace = true
+
+# Other
+futures.workspace = true
+
+[[bin]]
+name = "unwind-diff"
+path = "src/main.rs"

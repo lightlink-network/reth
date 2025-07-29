@@ -138,6 +138,7 @@ where
             td += header.difficulty();
 
             // Append to Headers segment
+            debug!(target: "sync::staged::headers", header_number = last_header_number, "Appending header");
             writer.append_header(header, td, header_hash)?;
         }
 
@@ -241,9 +242,10 @@ where
         loop {
             match ready!(self.downloader.poll_next_unpin(cx)) {
                 Some(Ok(headers)) => {
-                    info!(target: "sync::stages::headers", total = headers.len(), from_block = headers.first().map(|h| h.number()), to_block = headers.last().map(|h| h.number()), "Received headers");
+                    info!(target: "sync::stages::headers", total = headers.len(), from_block = headers.first().map(|h| h.number()), to_block = headers.last().map(|h| h.number()), local_head_number, "Received headers");
                     for header in headers {
                         let header_number = header.number();
+                        debug!(target: "sync::stages::headers", ?header_number, "Downloaded header number");
 
                         self.hash_collector.insert(header.hash(), header_number)?;
                         self.header_collector.insert(
