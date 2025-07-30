@@ -189,43 +189,57 @@ impl UnwindDiffCommand {
             let baseline_factory = self.create_provider_factory(&self.datadir_baseline).await?;
             let unwind_factory = self.create_provider_factory(&self.datadir_unwind).await?;
 
-            // Step 1: Sync baseline to end of this step
-            info!("Step 1: Syncing baseline to block {}", step_end_block);
-            println!("  📊 Step 1/4: Syncing baseline to block {}...", step_end_block);
-            {
-                let provider = baseline_factory.provider()?;
+            println!("  🔀 Running baseline sync and unwind operations concurrently...");
+
+            let unwind_sync_target = step_end_block + self.step;
+
+            // Extract necessary data for spawned tasks
+            let chain = self.chain.clone();
+
+            // Task 1: Sync baseline to end of this step
+            let baseline_factory_clone = baseline_factory.clone();
+            let snapshot_factory_clone = snapshot_factory.clone();
+            let chain_clone1 = chain.clone();
+
+            let baseline_task = tokio::spawn(async move {
+                info!("Syncing baseline to block {}", step_end_block);
+                let provider = baseline_factory_clone.provider()?;
                 let current = provider.best_block_number().unwrap_or(0);
                 drop(provider);
 
                 if current < step_end_block {
-                    self.sync_with_pipeline(
+                    // Call sync_with_pipeline as a standalone function
+                    UnwindDiffCommand::sync_with_pipeline_static(
                         step_end_block,
-                        snapshot_factory.clone(),
-                        baseline_factory.clone(),
+                        snapshot_factory_clone,
+                        baseline_factory_clone,
+                        chain_clone1,
                     )
                     .await?;
                 } else {
                     info!("Baseline already at or past block {}, skipping sync", step_end_block);
                 }
-            }
+                Ok::<(), eyre::Error>(())
+            });
 
-            // Step 2: Sync unwind datadir to 2*step blocks ahead
-            let unwind_sync_target = step_end_block + self.step;
-            info!("Step 2: Syncing unwind datadir to block {}", unwind_sync_target);
-            println!(
-                "  📈 Step 2/4: Syncing unwind datadir to block {} (2x step)...",
-                unwind_sync_target
-            );
-            {
-                let provider = unwind_factory.provider()?;
+            // Task 2: Sync unwind datadir and then unwind
+            let unwind_factory_clone = unwind_factory.clone();
+            let snapshot_factory_clone2 = snapshot_factory.clone();
+            let chain_clone2 = chain.clone();
+
+            let unwind_task = tokio::spawn(async move {
+                // First sync unwind datadir to 2*step blocks ahead
+                info!("Syncing unwind datadir to block {}", unwind_sync_target);
+                let provider = unwind_factory_clone.provider()?;
                 let current = provider.best_block_number().unwrap_or(0);
                 drop(provider);
 
                 if current < unwind_sync_target {
-                    self.sync_with_pipeline(
+                    UnwindDiffCommand::sync_with_pipeline_static(
                         unwind_sync_target,
-                        snapshot_factory.clone(),
-                        unwind_factory.clone(),
+                        snapshot_factory_clone2,
+                        unwind_factory_clone.clone(),
+                        chain_clone2.clone(),
                     )
                     .await?;
                 } else {
@@ -234,24 +248,34 @@ impl UnwindDiffCommand {
                         unwind_sync_target
                     );
                 }
-            }
 
-            // Step 3: Unwind back to step_end_block
-            info!("Step 3: Unwinding to block {}", step_end_block);
-            println!(
-                "  ⏪ Step 3/4: Unwinding {} blocks back to block {}...",
-                self.step, step_end_block
-            );
-            {
-                self.unwind_to_block(unwind_factory.clone(), step_end_block).await?;
-            }
+                // Then unwind back to step_end_block
+                info!("Unwinding to block {}", step_end_block);
+                UnwindDiffCommand::unwind_to_block_static(
+                    unwind_factory_clone,
+                    step_end_block,
+                    chain_clone2,
+                )
+                .await?;
+
+                Ok::<(), eyre::Error>(())
+            });
+
+            // Wait for both tasks to complete
+            let (baseline_result, unwind_result) = tokio::join!(baseline_task, unwind_task);
+
+            // Check for errors
+            baseline_result.map_err(|e| eyre!("Baseline task panicked: {}", e))??;
+            unwind_result.map_err(|e| eyre!("Unwind task panicked: {}", e))??;
+
+            println!("  ✅ Concurrent operations completed");
 
             // Drop the factories to release database locks before performing diff
             drop(baseline_factory);
             drop(unwind_factory);
 
-            // Step 4: Perform diff (both databases are now at step_end_block)
-            println!("  🔍 Step 4/4: Comparing databases at block {}...", step_end_block);
+            // Step 3: Perform diff (both databases are now at step_end_block)
+            println!("  🔍 Comparing databases at block {}...", step_end_block);
             let output_dir = self.output.join(format!("{}-{}", current_block, step_end_block));
             self.perform_diff(&self.datadir_baseline, &self.datadir_unwind, &output_dir)?;
 
@@ -277,15 +301,12 @@ impl UnwindDiffCommand {
         Ok(())
     }
 
-    /// Sync a target database to a specific block using a full pipeline with database downloaders.
-    ///
-    /// This method creates a complete sync pipeline with all stages, using the DatabaseDownloaders
-    /// to read blocks from the snapshot database instead of downloading from the network.
-    async fn sync_with_pipeline(
-        &self,
+    /// Static version of sync_with_pipeline for use in spawned tasks
+    async fn sync_with_pipeline_static(
         target_block: BlockNumber,
         snapshot_factory: ProviderFactory<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>,
         target_factory: ProviderFactory<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>,
+        chain: Arc<<EthereumChainSpecParser as ChainSpecParser>::ChainSpec>,
     ) -> Result<()> {
         use crate::database_downloader::{DatabaseBodyDownloader, DatabaseHeaderDownloader};
         use reth_config::config::StageConfig;
@@ -320,7 +341,7 @@ impl UnwindDiffCommand {
         }
 
         // Create EVM config and consensus
-        let evm_config = EthEvmConfig::new(self.chain.clone());
+        let evm_config = EthEvmConfig::new(chain.clone());
         let consensus = Arc::new(NoopConsensus::default());
 
         // Create database downloaders
@@ -607,11 +628,11 @@ impl UnwindDiffCommand {
         Ok(provider_factory)
     }
 
-    /// Unwind a database to a specific block height using a full unwind pipeline.
-    async fn unwind_to_block(
-        &self,
+    /// Static version of unwind_to_block for use in spawned tasks
+    async fn unwind_to_block_static(
         factory: ProviderFactory<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>,
         target_block: BlockNumber,
+        chain: Arc<<EthereumChainSpecParser as ChainSpecParser>::ChainSpec>,
     ) -> Result<()> {
         use reth_config::config::StageConfig;
         use reth_downloaders::{
@@ -647,7 +668,7 @@ impl UnwindDiffCommand {
         info!("Unwinding from block {} to block {} using pipeline", current_block, target_block);
 
         // Build an unwind pipeline with all necessary stages
-        let evm_config = EthEvmConfig::new(self.chain.clone());
+        let evm_config = EthEvmConfig::new(chain.clone());
         let consensus = Arc::new(NoopConsensus::default());
         let (tip_tx, tip_rx) = watch::channel(B256::ZERO);
 
@@ -696,6 +717,15 @@ impl UnwindDiffCommand {
 
         info!("Successfully unwound to block {}", target_block);
         Ok(())
+    }
+
+    /// Unwind a database to a specific block height using a full unwind pipeline.
+    async fn unwind_to_block(
+        &self,
+        factory: ProviderFactory<NodeTypesWithDBAdapter<EthereumNode, Arc<DatabaseEnv>>>,
+        target_block: BlockNumber,
+    ) -> Result<()> {
+        Self::unwind_to_block_static(factory, target_block, self.chain.clone()).await
     }
 
     /// Initializes tracing with the configured options.
