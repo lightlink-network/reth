@@ -68,6 +68,10 @@ pub struct UnwindDiffCommand {
     #[arg(long, default_value = "./unwind-results")]
     pub output: PathBuf,
 
+    /// Number of blocks to sync in each iteration
+    #[arg(long, default_value = "1")]
+    pub step: BlockNumber,
+
     #[command(flatten)]
     logs: LogArgs,
 }
@@ -103,9 +107,21 @@ impl UnwindDiffCommand {
         let to_block = self.to.unwrap_or(best_block);
 
         info!(
-            "Processing blocks from {} to {} (snapshot best: {})",
-            from_block, to_block, best_block
+            "Processing blocks from {} to {} with step {} (snapshot best: {})",
+            from_block, to_block, self.step, best_block
         );
+
+        // Validate that snapshot has enough blocks for the step size
+        let required_blocks = to_block + self.step;
+        if required_blocks > best_block {
+            return Err(eyre!(
+                "Snapshot doesn't have enough blocks. Required: {} (to_block {} + step {}), Available: {}",
+                required_blocks,
+                to_block,
+                self.step,
+                best_block
+            ));
+        }
 
         // Create output directory
         fs::create_dir_all(&self.output)?;
@@ -146,78 +162,68 @@ impl UnwindDiffCommand {
             }
         }
 
-        // Process each block
+        // Process blocks in steps
         let total_blocks = to_block - from_block + 1;
-        for (idx, block_number) in (from_block..=to_block).enumerate() {
+        let mut current_block = from_block;
+        let mut iteration = 0;
+
+        while current_block <= to_block {
             // Check for shutdown signal
             if shutdown.load(Ordering::Relaxed) {
-                println!("🛑 Shutdown requested, stopping at block {}", block_number);
+                println!("🛑 Shutdown requested, stopping at block {}", current_block);
                 return Err(eyre!("Process interrupted by user"));
             }
 
             let block_start_time = Instant::now();
 
-            // Print progress every block
+            // Calculate the end block for this step (don't exceed to_block)
+            let step_end_block = (current_block + self.step - 1).min(to_block);
+
+            iteration += 1;
             println!(
-                "🔄 Processing block {}/{} (block #{})...",
-                idx + 1,
-                total_blocks,
-                block_number
+                "🔄 Processing iteration {} - blocks {} to {} (step size: {})...",
+                iteration, current_block, step_end_block, self.step
             );
 
             // Create factories for this iteration
             let baseline_factory = self.create_provider_factory(&self.datadir_baseline).await?;
             let unwind_factory = self.create_provider_factory(&self.datadir_unwind).await?;
-            // Skip if we can't process the next block
-            if block_number >= best_block {
-                warn!("Skipping block {} - no next block available", block_number);
-                break;
-            }
 
-            let block_hash = snapshot_provider
-                .block_hash(block_number)?
-                .ok_or_else(|| eyre!("Block hash not found for block {}", block_number))?;
-
-            // Check that the subsequent block is available
-            snapshot_provider
-                .block_hash(block_number + 1)?
-                .ok_or_else(|| eyre!("Block hash not found for block {}", block_number + 1))?;
-
-            info!("Processing block {} ({})", block_number, block_hash);
-
-            // Step 1: Sync baseline to target block
-            info!("Step 1: Syncing baseline to block {}", block_number);
-            println!("  📊 Step 1/4: Syncing baseline to block {}...", block_number);
+            // Step 1: Sync baseline to end of this step
+            info!("Step 1: Syncing baseline to block {}", step_end_block);
+            println!("  📊 Step 1/4: Syncing baseline to block {}...", step_end_block);
             {
-                // Check if we need to sync (skip if already at genesis and target is 0)
                 let provider = baseline_factory.provider()?;
                 let current = provider.best_block_number().unwrap_or(0);
                 drop(provider);
 
-                if !(current == 0 && block_number == 0) {
+                if current < step_end_block {
                     self.sync_with_pipeline(
-                        block_number,
+                        step_end_block,
                         snapshot_factory.clone(),
                         baseline_factory.clone(),
                     )
                     .await?;
                 } else {
-                    info!("Baseline already at genesis block 0, skipping sync");
+                    info!("Baseline already at or past block {}, skipping sync", step_end_block);
                 }
             }
 
-            // Step 2: Sync unwind datadir to next block
-            info!("Step 2: Syncing unwind datadir to block {}", block_number + 1);
-            println!("  📈 Step 2/4: Syncing unwind datadir to block {}...", block_number + 1);
+            // Step 2: Sync unwind datadir to 2*step blocks ahead
+            let unwind_sync_target = step_end_block + self.step;
+            info!("Step 2: Syncing unwind datadir to block {}", unwind_sync_target);
+            println!(
+                "  📈 Step 2/4: Syncing unwind datadir to block {} (2x step)...",
+                unwind_sync_target
+            );
             {
-                // Check if we need to sync
                 let provider = unwind_factory.provider()?;
                 let current = provider.best_block_number().unwrap_or(0);
                 drop(provider);
 
-                if current < block_number + 1 {
+                if current < unwind_sync_target {
                     self.sync_with_pipeline(
-                        block_number + 1,
+                        unwind_sync_target,
                         snapshot_factory.clone(),
                         unwind_factory.clone(),
                     )
@@ -225,30 +231,45 @@ impl UnwindDiffCommand {
                 } else {
                     info!(
                         "Unwind datadir already at or past block {}, skipping sync",
-                        block_number + 1
+                        unwind_sync_target
                     );
                 }
             }
 
-            // Step 3: Unwind to target block
-            info!("Step 3: Unwinding to block {}", block_number);
-            println!("  ⏪ Step 3/4: Unwinding to block {}...", block_number);
+            // Step 3: Unwind back to step_end_block
+            info!("Step 3: Unwinding to block {}", step_end_block);
+            println!(
+                "  ⏪ Step 3/4: Unwinding {} blocks back to block {}...",
+                self.step, step_end_block
+            );
             {
-                self.unwind_to_block(unwind_factory.clone(), block_number).await?;
+                self.unwind_to_block(unwind_factory.clone(), step_end_block).await?;
             }
 
             // Drop the factories to release database locks before performing diff
             drop(baseline_factory);
             drop(unwind_factory);
 
-            // Step 4: Perform diff
-            println!("  🔍 Step 4/4: Comparing databases...");
-            let output_dir = self.output.join(format!("{}-{}", block_number + 1, block_number));
+            // Step 4: Perform diff (both databases are now at step_end_block)
+            println!("  🔍 Step 4/4: Comparing databases at block {}...", step_end_block);
+            let output_dir = self.output.join(format!("{}-{}", current_block, step_end_block));
             self.perform_diff(&self.datadir_baseline, &self.datadir_unwind, &output_dir)?;
 
             let block_duration = block_start_time.elapsed();
-            println!("  ✅ Completed block #{} in {:.2?}\n", block_number, block_duration);
-            info!("Completed processing block {} in {:?}", block_number, block_duration);
+            println!(
+                "  ✅ Completed {} blocks (#{} to #{}) in {:.2?}\n",
+                step_end_block - current_block + 1,
+                current_block,
+                step_end_block,
+                block_duration
+            );
+            info!(
+                "Completed processing blocks {} to {} in {:?}",
+                current_block, step_end_block, block_duration
+            );
+
+            // Move to next step
+            current_block = step_end_block + 1;
         }
 
         println!("\n🎉 All {} blocks processed successfully!", total_blocks);
