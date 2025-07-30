@@ -22,10 +22,7 @@ use std::{
     fs::{self, File},
     io::Write,
     path::{Path, PathBuf},
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
+    sync::Arc,
     time::Instant,
 };
 use tracing::{debug, error, info, warn};
@@ -82,17 +79,6 @@ impl UnwindDiffCommand {
         let _guard = self.init_tracing()?;
 
         info!("Starting unwind-diff process");
-
-        // Set up a shutdown flag for graceful shutdown
-        let shutdown = Arc::new(AtomicBool::new(false));
-        let shutdown_clone = shutdown.clone();
-
-        // Spawn a task to listen for ctrl-c
-        tokio::spawn(async move {
-            tokio::signal::ctrl_c().await.expect("Failed to listen for ctrl-c");
-            println!("\n⚠️  Received interrupt signal, shutting down gracefully...");
-            shutdown_clone.store(true, Ordering::Relaxed);
-        });
 
         // Open snapshot database to read blocks
         let snapshot_factory = EthereumNode::provider_factory_builder().open_read_only(
@@ -168,12 +154,6 @@ impl UnwindDiffCommand {
         let mut iteration = 0;
 
         while current_block <= to_block {
-            // Check for shutdown signal
-            if shutdown.load(Ordering::Relaxed) {
-                println!("🛑 Shutdown requested, stopping at block {}", current_block);
-                return Err(eyre!("Process interrupted by user"));
-            }
-
             let block_start_time = Instant::now();
 
             // Calculate the end block for this step (don't exceed to_block)
@@ -385,15 +365,7 @@ impl UnwindDiffCommand {
         info!("Running pipeline to sync to block {}", target_block);
 
         // Run the pipeline
-        tokio::select! {
-            res = pipeline.run() => {
-                res?;
-            }
-            _ = tokio::signal::ctrl_c() => {
-                info!("Interrupted, stopping pipeline...");
-                return Err(eyre!("Sync interrupted"));
-            }
-        }
+        pipeline.run().await?;
 
         info!("Successfully synced to block {} using pipeline", target_block);
         Ok(())
