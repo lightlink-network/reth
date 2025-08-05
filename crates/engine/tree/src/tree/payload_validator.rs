@@ -8,6 +8,7 @@ use crate::tree::{
     payload_processor::PayloadProcessor,
     persistence_state::CurrentPersistenceAction,
     precompile_cache::{CachedPrecompile, CachedPrecompileMetrics, PrecompileCacheMap},
+    prewarm::AccessRecord,
     sparse_trie::StateRootComputeOutcome,
     ConsistentDbView, EngineApiMetrics, EngineApiTreeState, ExecutionEnv, PayloadHandle,
     PersistenceState, PersistingKind, StateProviderBuilder, StateProviderDatabase, TreeConfig,
@@ -37,6 +38,7 @@ use reth_revm::db::State;
 use reth_trie::{updates::TrieUpdates, HashedPostState, TrieInput};
 use reth_trie_db::{DatabaseHashedPostState, StateCommitment};
 use reth_trie_parallel::root::{ParallelStateRoot, ParallelStateRootError};
+use revm::Database;
 use std::{collections::HashMap, convert::Infallible, sync::Arc, time::Instant};
 use tracing::{debug, error, info, trace, warn};
 
@@ -566,7 +568,7 @@ where
         state_provider: S,
         env: ExecutionEnv<Evm>,
         block: &RecoveredBlock<N::Block>,
-        handle: &mut PayloadHandle<impl OwnedExecutableTxFor<Evm>, Err>,
+        handle: &mut PayloadHandle<Evm, impl OwnedExecutableTxFor<Evm>, Err>,
     ) -> Result<(BlockExecutionOutput<N::Receipt>, Instant), InsertBlockErrorKind> {
         let num_hash = NumHash::new(env.evm_env.block_env.number.to(), env.hash);
         debug!(target: "engine::tree", block=?num_hash, "Executing block");
@@ -598,10 +600,41 @@ where
 
         let execution_start = Instant::now();
         let state_hook = Box::new(handle.state_hook());
-        let output = self.metrics.executor.execute_metered(
+        let tx_cache = handle.tx_cache.clone();
+        let output = self.metrics.executor.execute_metered::<_, _, N::SignedTx>(
             executor,
             handle.iter_transactions().map(|res| res.map_err(BlockExecutionError::other)),
             state_hook,
+            |db, tx_hash| {
+                tx_cache.get(&tx_hash).and_then(|res| {
+                    let (traces, result) = res.value();
+
+                    for trace in traces {
+                        let matches = match trace {
+                            AccessRecord::Account { address, result } => {
+                                if let Ok(account) = db.basic(*address) {
+                                    &account == result
+                                } else {
+                                    false
+                                }
+                            }
+                            AccessRecord::Storage { address, index, result } => {
+                                if let Ok(storage) = db.storage(*address, *index) {
+                                    &storage == result
+                                } else {
+                                    false
+                                }
+                            }
+                        };
+
+                        if !matches {
+                            return None;
+                        }
+                    }
+
+                    Some(result.clone())
+                })
+            },
         )?;
         let execution_finish = Instant::now();
         let execution_time = execution_finish.duration_since(execution_start);
