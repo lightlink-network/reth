@@ -9,8 +9,8 @@ use crate::{
     components::{NodeComponents, NodeComponentsBuilder},
     hooks::NodeHooks,
     launch::LaunchNode,
-    rpc::{RethRpcAddOns, RethRpcServerHandles, RpcContext},
-    AddOns, ComponentsFor, FullNode,
+    rpc::{RethRpcAddOns, RethRpcAddOnsWithoutHooks, RethRpcServerHandles, RpcContext},
+    AddOns, AddOnsWithRpcHooks, ComponentsFor, FullNode,
 };
 
 use reth_exex::ExExContext;
@@ -294,6 +294,45 @@ where
         // For now, still use hooks_mut() for backward compatibility
         // In future, this will store directly in self.add_ons.rpc_hooks
         self.add_ons.add_ons.hooks_mut().set_extend_rpc_modules(hook);
+        self
+    }
+}
+
+// New implementation for types that use RethRpcAddOnsWithoutHooks
+// This stores hooks directly in AddOns.rpc_hooks instead of using hooks_mut()
+impl<T, CB, AO> NodeBuilderWithComponents<T, CB, AO>
+where
+    T: FullNodeTypes,
+    CB: NodeComponentsBuilder<T>,
+    AO: RethRpcAddOnsWithoutHooks<NodeAdapter<T, CB::Components>>,
+    // The AddOns type must have rpc_hooks field of the right type
+    AddOns<NodeAdapter<T, CB::Components>, AO>:
+        AddOnsWithRpcHooks<Node = NodeAdapter<T, CB::Components>, AddOns = AO, EthApi = AO::EthApi>,
+{
+    /// Sets the hook that is run once the rpc server is started (new pattern).
+    pub fn on_rpc_started_new<F>(mut self, hook: F) -> Self
+    where
+        F: FnOnce(
+                RpcContext<'_, NodeAdapter<T, CB::Components>, AO::EthApi>,
+                RethRpcServerHandles,
+            ) -> eyre::Result<()>
+            + Send
+            + 'static,
+    {
+        // Store directly in self.add_ons.rpc_hooks (new pattern)
+        self.add_ons.set_on_rpc_started_hook(hook);
+        self
+    }
+
+    /// Sets the hook that is run to configure the rpc modules (new pattern).
+    pub fn extend_rpc_modules_new<F>(mut self, hook: F) -> Self
+    where
+        F: FnOnce(RpcContext<'_, NodeAdapter<T, CB::Components>, AO::EthApi>) -> eyre::Result<()>
+            + Send
+            + 'static,
+    {
+        // Store directly in self.add_ons.rpc_hooks (new pattern)
+        self.add_ons.set_extend_rpc_modules_hook(hook);
         self
     }
 }
