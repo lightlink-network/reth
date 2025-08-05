@@ -1282,3 +1282,178 @@ impl IntoEngineApiRpcModule for NoopEngineApi {
         RpcModule::new(())
     }
 }
+
+/// A simplified version of `RpcAddOns` that doesn't require Node and `EthApi` generics.
+/// This is the target structure after refactoring.
+pub struct RpcAddOnsWithoutHooks<
+    EthB,
+    PVB,
+    EB = BasicEngineApiBuilder<PVB>,
+    EVB = BasicEngineValidatorBuilder<PVB>,
+    RpcMiddleware = Identity,
+> {
+    /// Builder for `EthApi`
+    eth_api_builder: EthB,
+    /// Payload validator builder
+    payload_validator_builder: PVB,
+    /// Builder for `EngineApi`
+    engine_api_builder: EB,
+    /// Builder for tree validator
+    engine_validator_builder: EVB,
+    /// Configurable RPC middleware stack.
+    rpc_middleware: RpcMiddleware,
+}
+
+impl<EthB, PVB, EB, EVB, RpcMiddleware> Debug
+    for RpcAddOnsWithoutHooks<EthB, PVB, EB, EVB, RpcMiddleware>
+where
+    PVB: Debug,
+    EB: Debug,
+    EVB: Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RpcAddOnsWithoutHooks")
+            .field("eth_api_builder", &"...")
+            .field("payload_validator_builder", &self.payload_validator_builder)
+            .field("engine_api_builder", &self.engine_api_builder)
+            .field("engine_validator_builder", &self.engine_validator_builder)
+            .field("rpc_middleware", &"...")
+            .finish()
+    }
+}
+
+/// A wrapper that holds `RpcAddOns` along with hooks during the build phase.
+/// This allows us to separate concerns: the core RPC configuration doesn't need
+/// to know about Node types, while hooks can still be configured at build time.
+pub struct RpcAddOnsWithHooks<
+    Node: FullNodeComponents,
+    EthApi: EthApiTypes,
+    EthB,
+    PVB,
+    EB = BasicEngineApiBuilder<PVB>,
+    EVB = BasicEngineValidatorBuilder<PVB>,
+    RpcMiddleware = Identity,
+> {
+    /// The core RPC add-ons without hooks
+    pub addons: RpcAddOnsWithoutHooks<EthB, PVB, EB, EVB, RpcMiddleware>,
+    /// The hooks that will be passed to launch methods
+    pub hooks: RpcHooks<Node, EthApi>,
+}
+
+impl<Node, EthApi, EthB, PVB, EB, EVB, RpcMiddleware> Debug
+    for RpcAddOnsWithHooks<Node, EthApi, EthB, PVB, EB, EVB, RpcMiddleware>
+where
+    Node: FullNodeComponents,
+    EthApi: EthApiTypes,
+    PVB: Debug,
+    EB: Debug,
+    EVB: Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RpcAddOnsWithHooks")
+            .field("addons", &self.addons)
+            .field("hooks", &self.hooks)
+            .finish()
+    }
+}
+
+impl<Node, EthApi, EthB, PVB, EB, EVB, RpcMiddleware>
+    RpcAddOnsWithHooks<Node, EthApi, EthB, PVB, EB, EVB, RpcMiddleware>
+where
+    Node: FullNodeComponents,
+    EthApi: EthApiTypes,
+    EthB: EthApiBuilder<Node, EthApi = EthApi>,
+{
+    /// Sets the hook that is run once the rpc server is started.
+    pub fn on_rpc_started<F>(mut self, hook: F) -> Self
+    where
+        F: FnOnce(RpcContext<'_, Node, EthApi>, RethRpcServerHandles) -> eyre::Result<()>
+            + Send
+            + 'static,
+    {
+        self.hooks.set_on_rpc_started(hook);
+        self
+    }
+
+    /// Sets the hook that is run to configure the rpc modules.
+    pub fn extend_rpc_modules<F>(mut self, hook: F) -> Self
+    where
+        F: FnOnce(RpcContext<'_, Node, EthApi>) -> eyre::Result<()> + Send + 'static,
+    {
+        self.hooks.set_extend_rpc_modules(hook);
+        self
+    }
+
+    /// Launch the RPC servers using the configured hooks
+    pub async fn launch<F>(
+        self,
+        ctx: AddOnsContext<'_, Node>,
+        ext: F,
+    ) -> eyre::Result<RpcHandle<Node, EthApi>>
+    where
+        Node::Provider: ChainSpecProvider<ChainSpec: EthereumHardforks>,
+        EB: EngineApiBuilder<Node>,
+        EVB: EngineValidatorBuilder<Node>,
+        RpcMiddleware: RethRpcMiddleware,
+        F: FnOnce(RpcModuleContainer<'_, Node, EthApi>) -> eyre::Result<()>,
+    {
+        self.addons.launch_with_hooks(ctx, self.hooks, ext).await
+    }
+}
+
+impl<EthB, PVB, EB, EVB, RpcMiddleware> RpcAddOnsWithoutHooks<EthB, PVB, EB, EVB, RpcMiddleware> {
+    /// Creates a new instance without hooks
+    pub const fn new(
+        eth_api_builder: EthB,
+        payload_validator_builder: PVB,
+        engine_api_builder: EB,
+        engine_validator_builder: EVB,
+        rpc_middleware: RpcMiddleware,
+    ) -> Self {
+        Self {
+            eth_api_builder,
+            payload_validator_builder,
+            engine_api_builder,
+            engine_validator_builder,
+            rpc_middleware,
+        }
+    }
+
+    /// Wraps this instance with hooks for a specific Node type
+    pub const fn with_hooks<Node: FullNodeComponents, EthApi: EthApiTypes>(
+        self,
+        hooks: RpcHooks<Node, EthApi>,
+    ) -> RpcAddOnsWithHooks<Node, EthApi, EthB, PVB, EB, EVB, RpcMiddleware> {
+        RpcAddOnsWithHooks { addons: self, hooks }
+    }
+
+    /// Launch the RPC servers with hooks passed as parameters
+    pub async fn launch_with_hooks<N, F>(
+        self,
+        ctx: AddOnsContext<'_, N>,
+        hooks: RpcHooks<N, EthB::EthApi>,
+        ext: F,
+    ) -> eyre::Result<RpcHandle<N, EthB::EthApi>>
+    where
+        N: FullNodeComponents,
+        N::Provider: ChainSpecProvider<ChainSpec: EthereumHardforks>,
+        EthB: EthApiBuilder<N>,
+        EB: EngineApiBuilder<N>,
+        EVB: EngineValidatorBuilder<N>,
+        RpcMiddleware: RethRpcMiddleware,
+        F: FnOnce(RpcModuleContainer<'_, N, EthB::EthApi>) -> eyre::Result<()>,
+    {
+        // Convert to the old structure temporarily for compatibility
+        let old_addons = RpcAddOns {
+            hooks,
+            eth_api_builder: self.eth_api_builder,
+            payload_validator_builder: self.payload_validator_builder,
+            engine_api_builder: self.engine_api_builder,
+            engine_validator_builder: self.engine_validator_builder,
+            rpc_middleware: self.rpc_middleware,
+        };
+
+        // Use the existing launch method
+        old_addons.launch_add_ons_with(ctx, ext).await
+    }
+}
