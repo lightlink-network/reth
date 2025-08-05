@@ -47,7 +47,12 @@ impl<T: FullNodeTypes> NodeBuilderWithTypes<T> {
             config,
             adapter,
             components_builder,
-            add_ons: AddOns { hooks: NodeHooks::default(), exexs: Vec::new(), add_ons: () },
+            add_ons: AddOns {
+                hooks: NodeHooks::default(),
+                rpc_hooks: (),
+                exexs: Vec::new(),
+                add_ons: (),
+            },
         }
     }
 }
@@ -173,7 +178,12 @@ where
             config,
             adapter,
             components_builder,
-            add_ons: AddOns { hooks: NodeHooks::default(), exexs: Vec::new(), add_ons },
+            add_ons: AddOns {
+                hooks: NodeHooks::default(),
+                rpc_hooks: (),
+                exexs: Vec::new(),
+                add_ons,
+            },
         }
     }
 }
@@ -259,7 +269,7 @@ where
     }
 
     /// Sets the hook that is run once the rpc server is started.
-    pub fn on_rpc_started<F>(self, hook: F) -> Self
+    pub fn on_rpc_started<F>(mut self, hook: F) -> Self
     where
         F: FnOnce(
                 RpcContext<'_, NodeAdapter<T, CB::Components>, AO::EthApi>,
@@ -268,23 +278,23 @@ where
             + Send
             + 'static,
     {
-        self.map_add_ons(|mut add_ons| {
-            add_ons.hooks_mut().set_on_rpc_started(hook);
-            add_ons
-        })
+        // For now, still use hooks_mut() for backward compatibility
+        // In future, this will store directly in self.add_ons.rpc_hooks
+        self.add_ons.add_ons.hooks_mut().set_on_rpc_started(hook);
+        self
     }
 
     /// Sets the hook that is run to configure the rpc modules.
-    pub fn extend_rpc_modules<F>(self, hook: F) -> Self
+    pub fn extend_rpc_modules<F>(mut self, hook: F) -> Self
     where
         F: FnOnce(RpcContext<'_, NodeAdapter<T, CB::Components>, AO::EthApi>) -> eyre::Result<()>
             + Send
             + 'static,
     {
-        self.map_add_ons(|mut add_ons| {
-            add_ons.hooks_mut().set_extend_rpc_modules(hook);
-            add_ons
-        })
+        // For now, still use hooks_mut() for backward compatibility
+        // In future, this will store directly in self.add_ons.rpc_hooks
+        self.add_ons.add_ons.hooks_mut().set_extend_rpc_modules(hook);
+        self
     }
 }
 

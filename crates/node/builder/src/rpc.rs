@@ -1016,6 +1016,24 @@ where
     }
 }
 
+/// RPC add-ons trait without hooks, used for the refactored architecture
+/// where hooks are stored separately and passed at launch time.
+pub trait RethRpcAddOnsWithoutHooks<N: FullNodeComponents>:
+    NodeAddOns<N, Handle = RpcHandle<N, Self::EthApi>>
+{
+    /// eth API implementation.
+    type EthApi: EthApiTypes;
+}
+
+impl<N: FullNodeComponents, EthB, PVB, EB, EVB, RpcMiddleware> RethRpcAddOnsWithoutHooks<N>
+    for RpcAddOnsWithoutHooks<EthB, PVB, EB, EVB, RpcMiddleware>
+where
+    Self: NodeAddOns<N, Handle = RpcHandle<N, EthB::EthApi>>,
+    EthB: EthApiBuilder<N>,
+{
+    type EthApi = EthB::EthApi;
+}
+
 /// `EthApiCtx` struct
 /// This struct is used to pass the necessary context to the `EthApiBuilder` to build the `EthApi`.
 #[derive(Debug)]
@@ -1398,6 +1416,24 @@ where
         F: FnOnce(RpcModuleContainer<'_, Node, EthApi>) -> eyre::Result<()>,
     {
         self.addons.launch_with_hooks(ctx, self.hooks, ext).await
+    }
+}
+
+impl<EthB, PVB, EB, EVB> Default for RpcAddOnsWithoutHooks<EthB, PVB, EB, EVB, Identity>
+where
+    EthB: Default,
+    PVB: Default,
+    EB: Default,
+    EVB: Default,
+{
+    fn default() -> Self {
+        Self::new(
+            EthB::default(),
+            PVB::default(),
+            EB::default(),
+            EVB::default(),
+            Identity::default(),
+        )
     }
 }
 

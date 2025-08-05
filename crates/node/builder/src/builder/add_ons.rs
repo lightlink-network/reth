@@ -7,9 +7,12 @@ use crate::{exex::BoxedLaunchExEx, hooks::NodeHooks};
 /// Additional node extensions.
 ///
 /// At this point we consider all necessary components defined.
-pub struct AddOns<Node: FullNodeComponents, AddOns: NodeAddOns<Node>> {
+pub struct AddOns<Node: FullNodeComponents, AddOns: NodeAddOns<Node>, RpcHooks = ()> {
     /// Additional `NodeHooks` that are called at specific points in the node's launch lifecycle.
     pub hooks: NodeHooks<Node, AddOns>,
+    /// RPC hooks that will be passed to the RPC addons at launch time.
+    /// These are stored here temporarily during the migration from storing them in `RpcAddOns`.
+    pub rpc_hooks: RpcHooks,
     /// The `ExExs` (execution extensions) of the node.
     pub exexs: Vec<(String, Box<dyn BoxedLaunchExEx<Node>>)>,
     /// Additional captured addons.
