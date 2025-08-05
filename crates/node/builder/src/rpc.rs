@@ -1455,6 +1455,48 @@ impl<EthB, PVB, EB, EVB, RpcMiddleware> RpcAddOnsWithoutHooks<EthB, PVB, EB, EVB
         }
     }
 
+    /// Replace the engine API builder.
+    pub fn with_engine_api<T>(
+        self,
+        engine_api_builder: T,
+    ) -> RpcAddOnsWithoutHooks<EthB, PVB, T, EVB, RpcMiddleware> {
+        RpcAddOnsWithoutHooks::new(
+            self.eth_api_builder,
+            self.payload_validator_builder,
+            engine_api_builder,
+            self.engine_validator_builder,
+            self.rpc_middleware,
+        )
+    }
+
+    /// Replace the payload validator builder.
+    pub fn with_payload_validator<T>(
+        self,
+        payload_validator_builder: T,
+    ) -> RpcAddOnsWithoutHooks<EthB, T, EB, EVB, RpcMiddleware> {
+        RpcAddOnsWithoutHooks::new(
+            self.eth_api_builder,
+            payload_validator_builder,
+            self.engine_api_builder,
+            self.engine_validator_builder,
+            self.rpc_middleware,
+        )
+    }
+
+    /// Sets rpc middleware
+    pub fn with_rpc_middleware<T>(
+        self,
+        rpc_middleware: T,
+    ) -> RpcAddOnsWithoutHooks<EthB, PVB, EB, EVB, T> {
+        RpcAddOnsWithoutHooks::new(
+            self.eth_api_builder,
+            self.payload_validator_builder,
+            self.engine_api_builder,
+            self.engine_validator_builder,
+            rpc_middleware,
+        )
+    }
+
     /// Wraps this instance with hooks for a specific Node type
     pub const fn with_hooks<Node: FullNodeComponents, EthApi: EthApiTypes>(
         self,
