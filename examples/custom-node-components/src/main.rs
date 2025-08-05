@@ -8,7 +8,7 @@ use reth_ethereum::{
     node::{
         api::{FullNodeTypes, NodeTypes},
         builder::{components::PoolBuilder, BuilderContext},
-        node::EthereumAddOns,
+        node::EthereumAddOnsWithoutHooks,
         EthereumNode,
     },
     pool::{
@@ -29,7 +29,7 @@ fn main() {
                 // Configure the components of the node
                 // use default ethereum components but use our custom pool
                 .with_components(EthereumNode::components().pool(CustomPoolBuilder::default()))
-                .with_add_ons(EthereumAddOns::default())
+                .with_add_ons(EthereumAddOnsWithoutHooks::default())
                 .launch()
                 .await?;
 

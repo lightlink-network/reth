@@ -13,7 +13,7 @@ use reth_node_api::{
     Block, BlockBody, BlockTy, EngineApiMessageVersion, FullNodeComponents, PayloadTypes,
     PrimitivesTy,
 };
-use reth_node_builder::{rpc::RethRpcAddOns, FullNode, NodeTypes};
+use reth_node_builder::{rpc::RethRpcAddOnsWithoutHooks, FullNode, NodeTypes};
 use reth_node_core::primitives::SignedTransaction;
 use reth_payload_primitives::{BuiltPayload, PayloadBuilderAttributes};
 use reth_provider::{
@@ -32,7 +32,7 @@ use url::Url;
 pub struct NodeTestContext<Node, AddOns>
 where
     Node: FullNodeComponents,
-    AddOns: RethRpcAddOns<Node>,
+    AddOns: RethRpcAddOnsWithoutHooks<Node>,
 {
     /// The core structure representing the full node.
     pub inner: FullNode<Node, AddOns>,
@@ -52,7 +52,7 @@ where
     Node: FullNodeComponents,
     Node::Types: NodeTypes<ChainSpec: EthereumHardforks, Payload = Payload>,
     Node::Network: PeersHandleProvider,
-    AddOns: RethRpcAddOns<Node>,
+    AddOns: RethRpcAddOnsWithoutHooks<Node>,
 {
     /// Creates a new test node
     pub async fn new(

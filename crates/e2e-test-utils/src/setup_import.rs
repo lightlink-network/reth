@@ -4,8 +4,8 @@ use crate::{node::NodeTestContext, NodeHelperType, Wallet};
 use reth_chainspec::ChainSpec;
 use reth_cli_commands::import_op::{import_blocks_from_file, ImportConfig};
 use reth_config::Config;
-use reth_db::DatabaseEnv;
-use reth_node_api::{NodeTypesWithDBAdapter, TreeConfig};
+use reth_db::{test_utils::TempDatabase, DatabaseEnv};
+use reth_node_api::{FullNodeTypesAdapter, NodeTypesWithDBAdapter, TreeConfig};
 use reth_node_builder::{EngineNodeLauncher, Node, NodeBuilder, NodeConfig, NodeHandle};
 use reth_node_core::args::{DiscoveryArgs, NetworkArgs, RpcServerArgs};
 use reth_node_ethereum::EthereumNode;
@@ -219,11 +219,19 @@ pub async fn setup_engine_with_chain_import(
         // databases
         let node = EthereumNode::default();
 
+        type N = FullNodeTypesAdapter<
+            EthereumNode,
+            Arc<TempDatabase<DatabaseEnv>>,
+            BlockchainProvider<
+                NodeTypesWithDBAdapter<EthereumNode, Arc<TempDatabase<DatabaseEnv>>>,
+            >,
+        >;
+
         let NodeHandle { node, node_exit_future: _ } = NodeBuilder::new(node_config.clone())
             .testing_node_with_datadir(exec.clone(), datadir.clone())
             .with_types_and_provider::<EthereumNode, BlockchainProvider<_>>()
-            .with_components(node.components_builder())
-            .with_add_ons(node.add_ons())
+            .with_components(<EthereumNode as Node<N>>::components_builder(&node))
+            .with_add_ons(<EthereumNode as Node<N>>::add_ons(&node))
             .launch_with_fn(|builder| {
                 let launcher = EngineNodeLauncher::new(
                     builder.task_executor().clone(),

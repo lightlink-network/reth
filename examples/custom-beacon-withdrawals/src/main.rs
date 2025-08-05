@@ -31,7 +31,7 @@ use reth_ethereum::{
     node::{
         api::{ConfigureEvm, FullNodeTypes, NodeTypes},
         builder::{components::ExecutorBuilder, BuilderContext},
-        node::EthereumAddOns,
+        node::EthereumAddOnsWithoutHooks,
         EthereumNode,
     },
     primitives::{Header, SealedBlock, SealedHeader},
@@ -54,7 +54,7 @@ fn main() {
                 .with_components(
                     EthereumNode::components().executor(CustomExecutorBuilder::default()),
                 )
-                .with_add_ons(EthereumAddOns::default())
+                .with_add_ons(EthereumAddOnsWithoutHooks::default())
                 .launch()
                 .await?;
 

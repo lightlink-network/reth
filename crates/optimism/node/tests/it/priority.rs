@@ -9,7 +9,7 @@ use reth_db::test_utils::create_test_rw_db_with_path;
 use reth_e2e_test_utils::{
     node::NodeTestContext, transaction::TransactionTestContext, wallet::Wallet,
 };
-use reth_node_api::FullNodeTypes;
+use reth_node_api::{FullNodeTypes, FullNodeTypesAdapter};
 use reth_node_builder::{
     components::{BasicPayloadServiceBuilder, ComponentsBuilder},
     EngineNodeLauncher, Node, NodeBuilder, NodeConfig,
@@ -132,11 +132,22 @@ async fn test_custom_block_priority_config() {
             .db(),
     );
     let tasks = TaskManager::current();
+    let op_node = OpNode::new(Default::default());
+    type N = FullNodeTypesAdapter<
+        OpNode,
+        std::sync::Arc<reth_db::test_utils::TempDatabase<reth_db::DatabaseEnv>>,
+        BlockchainProvider<
+            reth_node_api::NodeTypesWithDBAdapter<
+                OpNode,
+                std::sync::Arc<reth_db::test_utils::TempDatabase<reth_db::DatabaseEnv>>,
+            >,
+        >,
+    >;
     let node_handle = NodeBuilder::new(config.clone())
         .with_database(db)
         .with_types_and_provider::<OpNode, BlockchainProvider<_>>()
         .with_components(build_components(config.chain.chain_id()))
-        .with_add_ons(OpNode::new(Default::default()).add_ons())
+        .with_add_ons(<OpNode as Node<N>>::add_ons(&op_node))
         .launch_with_fn(|builder| {
             let launcher = EngineNodeLauncher::new(
                 tasks.executor(),

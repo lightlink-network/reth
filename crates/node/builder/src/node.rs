@@ -1,7 +1,9 @@
 // re-export the node api types
 pub use reth_node_api::{FullNodeTypes, NodeTypes};
 
-use crate::{components::NodeComponentsBuilder, rpc::RethRpcAddOns, NodeAdapter, NodeAddOns};
+use crate::{
+    components::NodeComponentsBuilder, rpc::RethRpcAddOnsWithoutHooks, NodeAdapter, NodeAddOns,
+};
 use reth_node_api::{EngineTypes, FullNodeComponents, PayloadTypes};
 use reth_node_core::{
     dirs::{ChainPath, DataDirPath},
@@ -155,7 +157,7 @@ impl<Payload, Node, AddOns> FullNode<Node, AddOns>
 where
     Payload: PayloadTypes,
     Node: FullNodeComponents<Types: NodeTypes<Payload = Payload>>,
-    AddOns: RethRpcAddOns<Node>,
+    AddOns: RethRpcAddOnsWithoutHooks<Node>,
 {
     /// Returns the [`RpcServerHandle`] to the started rpc server.
     pub const fn rpc_server_handle(&self) -> &RpcServerHandle {
@@ -172,7 +174,7 @@ impl<Engine, Node, AddOns> FullNode<Node, AddOns>
 where
     Engine: EngineTypes,
     Node: FullNodeComponents<Types: NodeTypes<Payload = Engine>>,
-    AddOns: RethRpcAddOns<Node>,
+    AddOns: RethRpcAddOnsWithoutHooks<Node>,
 {
     /// Returns the [`EngineApiClient`] interface for the authenticated engine API.
     ///

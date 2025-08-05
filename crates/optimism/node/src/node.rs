@@ -32,7 +32,7 @@ use reth_node_builder::{
         RethRpcAddOnsWithoutHooks, RethRpcMiddleware, RethRpcServerHandles, RpcAddOns,
         RpcAddOnsWithoutHooks, RpcContext, RpcHandle, RpcHooks,
     },
-    BuilderContext, DebugNode, Node, NodeAdapter, NodeComponentsBuilder,
+    BuilderContext, DebugNode, Node,
 };
 use reth_optimism_chainspec::{OpChainSpec, OpHardfork};
 use reth_optimism_consensus::OpBeaconConsensus;
@@ -226,8 +226,7 @@ where
         OpConsensusBuilder,
     >;
 
-    type AddOns = OpAddOns<
-        NodeAdapter<N, <Self::ComponentsBuilder as NodeComponentsBuilder<N>>::Components>,
+    type AddOns = OpAddOnsWithoutHooks<
         OpEthApiBuilder,
         OpEngineValidatorBuilder,
         OpEngineApiBuilder<OpEngineValidatorBuilder>,
@@ -239,7 +238,7 @@ where
     }
 
     fn add_ons(&self) -> Self::AddOns {
-        self.add_ons_builder().build()
+        self.add_ons_builder().build_without_hooks()
     }
 }
 
@@ -763,6 +762,46 @@ impl<NetworkT, RpcMiddleware> OpAddOnsBuilder<NetworkT, RpcMiddleware> {
 
         OpAddOns::new(
             RpcAddOns::new(
+                OpEthApiBuilder::default()
+                    .with_sequencer(sequencer_url.clone())
+                    .with_sequencer_headers(sequencer_headers.clone())
+                    .with_min_suggested_priority_fee(min_suggested_priority_fee),
+                PVB::default(),
+                EB::default(),
+                EVB::default(),
+                rpc_middleware,
+            ),
+            da_config.unwrap_or_default(),
+            sequencer_url,
+            sequencer_headers,
+            historical_rpc,
+            enable_tx_conditional,
+            min_suggested_priority_fee,
+        )
+    }
+
+    /// Builds an instance of [`OpAddOnsWithoutHooks`].
+    pub fn build_without_hooks<PVB, EB, EVB>(
+        self,
+    ) -> OpAddOnsWithoutHooks<OpEthApiBuilder<NetworkT>, PVB, EB, EVB, RpcMiddleware>
+    where
+        PVB: Default,
+        EB: Default,
+        EVB: Default,
+    {
+        let Self {
+            sequencer_url,
+            sequencer_headers,
+            da_config,
+            enable_tx_conditional,
+            min_suggested_priority_fee,
+            historical_rpc,
+            rpc_middleware,
+            ..
+        } = self;
+
+        OpAddOnsWithoutHooks::new(
+            RpcAddOnsWithoutHooks::new(
                 OpEthApiBuilder::default()
                     .with_sequencer(sequencer_url.clone())
                     .with_sequencer_headers(sequencer_headers.clone())
@@ -1478,4 +1517,21 @@ where
     Attrs: OpAttributes<Transaction = TxTy<N::Types>, RpcPayloadAttributes: DeserializeOwned>,
 {
     type EthApi = EthB::EthApi;
+}
+
+impl<N, EthB, PVB, EB, EVB, RpcMiddleware> EngineValidatorAddOn<N>
+    for OpAddOnsWithoutHooks<EthB, PVB, EB, EVB, RpcMiddleware>
+where
+    N: FullNodeComponents,
+    EthB: EthApiBuilder<N>,
+    PVB: Send,
+    EB: EngineApiBuilder<N>,
+    EVB: EngineValidatorBuilder<N>,
+    RpcMiddleware: RethRpcMiddleware,
+{
+    type ValidatorBuilder = EVB;
+
+    fn engine_validator_builder(&self) -> Self::ValidatorBuilder {
+        self.rpc_add_ons.engine_validator_builder().clone()
+    }
 }

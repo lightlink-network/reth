@@ -1322,6 +1322,30 @@ pub struct RpcAddOnsWithoutHooks<
     rpc_middleware: RpcMiddleware,
 }
 
+impl<EthB, PVB, EB, EVB, RpcMiddleware> RpcAddOnsWithoutHooks<EthB, PVB, EB, EVB, RpcMiddleware> {
+    /// Creates a new instance of the RPC addons.
+    pub const fn new(
+        eth_api_builder: EthB,
+        payload_validator_builder: PVB,
+        engine_api_builder: EB,
+        engine_validator_builder: EVB,
+        rpc_middleware: RpcMiddleware,
+    ) -> Self {
+        Self {
+            eth_api_builder,
+            payload_validator_builder,
+            engine_api_builder,
+            engine_validator_builder,
+            rpc_middleware,
+        }
+    }
+
+    /// Returns the engine validator builder.
+    pub const fn engine_validator_builder(&self) -> &EVB {
+        &self.engine_validator_builder
+    }
+}
+
 impl<EthB, PVB, EB, EVB, RpcMiddleware> Debug
     for RpcAddOnsWithoutHooks<EthB, PVB, EB, EVB, RpcMiddleware>
 where
@@ -1438,23 +1462,6 @@ where
 }
 
 impl<EthB, PVB, EB, EVB, RpcMiddleware> RpcAddOnsWithoutHooks<EthB, PVB, EB, EVB, RpcMiddleware> {
-    /// Creates a new instance without hooks
-    pub const fn new(
-        eth_api_builder: EthB,
-        payload_validator_builder: PVB,
-        engine_api_builder: EB,
-        engine_validator_builder: EVB,
-        rpc_middleware: RpcMiddleware,
-    ) -> Self {
-        Self {
-            eth_api_builder,
-            payload_validator_builder,
-            engine_api_builder,
-            engine_validator_builder,
-            rpc_middleware,
-        }
-    }
-
     /// Replace the engine API builder.
     pub fn with_engine_api<T>(
         self,

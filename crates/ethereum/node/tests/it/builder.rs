@@ -1,14 +1,8 @@
 //! Node builder setup tests.
 
-use std::sync::Arc;
-
-use reth_db::{
-    test_utils::{create_test_rw_db, TempDatabase},
-    DatabaseEnv,
-};
-use reth_node_api::NodeTypesWithDBAdapter;
+use reth_db::test_utils::create_test_rw_db;
 use reth_node_builder::{EngineNodeLauncher, FullNodeComponents, NodeBuilder, NodeConfig};
-use reth_node_ethereum::node::{EthereumAddOns, EthereumNode};
+use reth_node_ethereum::node::{EthereumAddOnsWithoutHooks, EthereumNode};
 use reth_provider::providers::BlockchainProvider;
 use reth_rpc_builder::Identity;
 use reth_tasks::TaskManager;
@@ -23,7 +17,7 @@ fn test_basic_setup() {
         .with_database(db)
         .with_types::<EthereumNode>()
         .with_components(EthereumNode::components())
-        .with_add_ons(EthereumAddOns::default())
+        .with_add_ons(EthereumAddOnsWithoutHooks::default())
         .on_component_initialized(move |ctx| {
             let _provider = ctx.provider();
             println!("{msg}");
@@ -49,27 +43,24 @@ async fn test_eth_launcher() {
     let tasks = TaskManager::current();
     let config = NodeConfig::test();
     let db = create_test_rw_db();
-    let _builder =
-        NodeBuilder::new(config)
-            .with_database(db)
-            .with_launch_context(tasks.executor())
-            .with_types_and_provider::<EthereumNode, BlockchainProvider<
-                NodeTypesWithDBAdapter<EthereumNode, Arc<TempDatabase<DatabaseEnv>>>,
-            >>()
-            .with_components(EthereumNode::components())
-            .with_add_ons(EthereumAddOns::default())
-            .apply(|builder| {
-                let _ = builder.db();
-                builder
-            })
-            .launch_with_fn(|builder| {
-                let launcher = EngineNodeLauncher::new(
-                    tasks.executor(),
-                    builder.config().datadir(),
-                    Default::default(),
-                );
-                builder.launch_with(launcher)
-            });
+    let _builder = NodeBuilder::new(config)
+        .with_database(db)
+        .with_launch_context(tasks.executor())
+        .with_types_and_provider::<EthereumNode, BlockchainProvider<_>>()
+        .with_components(EthereumNode::components())
+        .with_add_ons(EthereumAddOnsWithoutHooks::default())
+        .apply(|builder| {
+            let _ = builder.db();
+            builder
+        })
+        .launch_with_fn(|builder| {
+            let launcher = EngineNodeLauncher::new(
+                tasks.executor(),
+                builder.config().datadir(),
+                Default::default(),
+            );
+            builder.launch_with(launcher)
+        });
 }
 
 #[test]

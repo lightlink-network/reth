@@ -25,7 +25,7 @@ use reth_ethereum::{
         api::{FullNodeTypes, NodeTypes},
         builder::{components::ExecutorBuilder, BuilderContext, NodeBuilder},
         core::{args::RpcServerArgs, node_config::NodeConfig},
-        node::EthereumAddOns,
+        node::EthereumAddOnsWithoutHooks,
         EthereumNode,
     },
     tasks::TaskManager,
@@ -136,7 +136,7 @@ async fn main() -> eyre::Result<()> {
         .with_types::<EthereumNode>()
         // use default ethereum components but with our executor
         .with_components(EthereumNode::components().executor(MyExecutorBuilder::default()))
-        .with_add_ons(EthereumAddOns::default())
+        .with_add_ons(EthereumAddOnsWithoutHooks::default())
         .launch()
         .await
         .unwrap();
