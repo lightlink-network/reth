@@ -1497,6 +1497,37 @@ impl<EthB, PVB, EB, EVB, RpcMiddleware> RpcAddOnsWithoutHooks<EthB, PVB, EB, EVB
         )
     }
 
+    /// Add a new layer `T` to the configured rpc middleware.
+    pub fn layer_rpc_middleware<T>(
+        self,
+        layer: T,
+    ) -> RpcAddOnsWithoutHooks<EthB, PVB, EB, EVB, Stack<RpcMiddleware, T>> {
+        let Self {
+            eth_api_builder,
+            payload_validator_builder,
+            engine_api_builder,
+            engine_validator_builder,
+            rpc_middleware,
+        } = self;
+        let rpc_middleware = Stack::new(rpc_middleware, layer);
+        RpcAddOnsWithoutHooks::new(
+            eth_api_builder,
+            payload_validator_builder,
+            engine_api_builder,
+            engine_validator_builder,
+            rpc_middleware,
+        )
+    }
+
+    /// Optionally adds a new layer `T` to the configured rpc middleware.
+    pub fn option_layer_rpc_middleware<T>(
+        self,
+        layer: Option<T>,
+    ) -> RpcAddOnsWithoutHooks<EthB, PVB, EB, EVB, Stack<RpcMiddleware, Either<T, Identity>>> {
+        let layer = layer.map(Either::Left).unwrap_or(Either::Right(Identity::new()));
+        self.layer_rpc_middleware(layer)
+    }
+
     /// Wraps this instance with hooks for a specific Node type
     pub const fn with_hooks<Node: FullNodeComponents, EthApi: EthApiTypes>(
         self,
