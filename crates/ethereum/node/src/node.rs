@@ -31,7 +31,7 @@ use reth_node_builder::{
     rpc::{
         BasicEngineApiBuilder, BasicEngineValidatorBuilder, EngineApiBuilder, EngineValidatorAddOn,
         EngineValidatorBuilder, EthApiBuilder, EthApiCtx, Identity, PayloadValidatorBuilder,
-        RethRpcAddOns, RpcAddOns, RpcHandle, RpcHooks,
+        RethRpcAddOns, RpcAddOns, RpcHandle,
     },
     BuilderContext, DebugNode, Node, PayloadBuilderConfig,
 };
@@ -170,7 +170,7 @@ where
     }
 }
 
-/// Add-ons w.r.t. l1 ethereum (without hooks in storage).
+/// Add-ons w.r.t. l1 ethereum.
 #[derive(Debug)]
 pub struct EthereumAddOns<
     EthB,
@@ -267,9 +267,8 @@ where
             Arc::new(EthereumEngineValidator::new(ctx.config.chain.clone())),
         );
 
-        // Launch with empty hooks for now - hooks will be passed at launch time in the future
         self.inner
-            .launch_with_hooks(ctx, RpcHooks::default(), move |container| {
+            .launch_add_ons_with(ctx, move |container| {
                 container.modules.merge_if_module_configured(
                     RethRpcModule::Flashbots,
                     validation_api.into_rpc(),
@@ -281,8 +280,7 @@ where
     }
 }
 
-impl<N, EthB, PVB, EB, EVB, RpcMiddleware> RethRpcAddOns<N>
-    for EthereumAddOns<EthB, PVB, EB, EVB, RpcMiddleware>
+impl<N, EthB, PVB, EB, EVB> RethRpcAddOns<N> for EthereumAddOns<EthB, PVB, EB, EVB>
 where
     N: FullNodeComponents<
         Types: NodeTypes<
@@ -298,13 +296,11 @@ where
     EVB: EngineValidatorBuilder<N>,
     EthApiError: FromEvmError<N::Evm>,
     EvmFactoryFor<N::Evm>: EvmFactory<Tx = TxEnv>,
-    RpcMiddleware: RethRpcMiddleware,
 {
     type EthApi = EthB::EthApi;
 }
 
-impl<N, EthB, PVB, EB, EVB, RpcMiddleware> EngineValidatorAddOn<N>
-    for EthereumAddOns<EthB, PVB, EB, EVB, RpcMiddleware>
+impl<N, EthB, PVB, EB, EVB> EngineValidatorAddOn<N> for EthereumAddOns<EthB, PVB, EB, EVB>
 where
     N: FullNodeComponents<
         Types: NodeTypes<
@@ -320,7 +316,6 @@ where
     EVB: EngineValidatorBuilder<N>,
     EthApiError: FromEvmError<N::Evm>,
     EvmFactoryFor<N::Evm>: EvmFactory<Tx = TxEnv>,
-    RpcMiddleware: RethRpcMiddleware,
 {
     type ValidatorBuilder = EVB;
 

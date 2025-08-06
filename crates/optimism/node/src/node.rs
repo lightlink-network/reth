@@ -29,7 +29,7 @@ use reth_node_builder::{
     rpc::{
         BasicEngineValidatorBuilder, EngineApiBuilder, EngineValidatorAddOn,
         EngineValidatorBuilder, EthApiBuilder, Identity, PayloadValidatorBuilder, RethRpcAddOns,
-        RethRpcMiddleware, RpcAddOns, RpcHandle, RpcHooks,
+        RethRpcMiddleware, RpcAddOns, RpcHandle,
     },
     BuilderContext, DebugNode, Node,
 };
@@ -177,6 +177,14 @@ impl OpNode {
             .with_historical_rpc(self.args.historical_rpc.clone())
     }
 
+    /// Returns the default add-ons for the node.
+    ///
+    /// This is a convenience method that returns the default [`OpAddOns`] configuration
+    /// based on the node's arguments, without requiring the full node type.
+    pub fn default_add_ons(&self) -> OpAddOns<OpEthApiBuilder, OpEngineValidatorBuilder> {
+        self.add_ons_builder().build()
+    }
+
     /// Instantiates the [`ProviderFactoryBuilder`] for an opstack node.
     ///
     /// # Open a Providerfactory in read-only mode from a datadir
@@ -237,7 +245,7 @@ where
     }
 
     fn add_ons(&self) -> Self::AddOns {
-        self.add_ons_builder().build_without_hooks()
+        self.add_ons_builder().build()
     }
 }
 
@@ -266,9 +274,11 @@ impl NodeTypes for OpNode {
     type Payload = OpEngineTypes;
 }
 
-/// A regular optimism evm and executor builder.
-#[derive(Debug, Clone)]
-#[non_exhaustive]
+/// Add-ons w.r.t. optimism.
+///
+/// This type provides optimism-specific addons to the node and exposes the RPC server and engine
+/// API.
+#[derive(Debug)]
 pub struct OpAddOnsBuilder<NetworkT, RpcMiddleware = Identity> {
     /// Sequencer client, configured to forward submitted transactions to sequencer of given OP
     /// network.
@@ -276,6 +286,8 @@ pub struct OpAddOnsBuilder<NetworkT, RpcMiddleware = Identity> {
     /// Headers to use for the sequencer client requests.
     sequencer_headers: Vec<String>,
     /// RPC endpoint for historical data.
+    ///
+    /// This can be used to forward pre-bedrock rpc requests (op-mainnet).
     historical_rpc: Option<String>,
     /// Data availability configuration for the OP builder.
     da_config: Option<OpDAConfig>,
@@ -306,8 +318,8 @@ impl<NetworkT> Default for OpAddOnsBuilder<NetworkT> {
 
 impl<NetworkT, RpcMiddleware> OpAddOnsBuilder<NetworkT, RpcMiddleware> {
     /// With a [`SequencerClient`].
-    pub fn with_sequencer(mut self, sequencer_client: Option<String>) -> Self {
-        self.sequencer_url = sequencer_client;
+    pub fn with_sequencer(mut self, sequencer_url: Option<String>) -> Self {
+        self.sequencer_url = sequencer_url;
         self
     }
 
@@ -369,46 +381,6 @@ impl<NetworkT, RpcMiddleware> OpAddOnsBuilder<NetworkT, RpcMiddleware> {
 impl<NetworkT, RpcMiddleware> OpAddOnsBuilder<NetworkT, RpcMiddleware> {
     /// Builds an instance of [`OpAddOns`].
     pub fn build<PVB, EB, EVB>(
-        self,
-    ) -> OpAddOns<OpEthApiBuilder<NetworkT>, PVB, EB, EVB, RpcMiddleware>
-    where
-        PVB: Default,
-        EB: Default,
-        EVB: Default,
-    {
-        let Self {
-            sequencer_url,
-            sequencer_headers,
-            da_config,
-            enable_tx_conditional,
-            min_suggested_priority_fee,
-            historical_rpc,
-            rpc_middleware,
-            ..
-        } = self;
-
-        OpAddOns::new(
-            RpcAddOns::new(
-                OpEthApiBuilder::default()
-                    .with_sequencer(sequencer_url.clone())
-                    .with_sequencer_headers(sequencer_headers.clone())
-                    .with_min_suggested_priority_fee(min_suggested_priority_fee),
-                PVB::default(),
-                EB::default(),
-                EVB::default(),
-                rpc_middleware,
-            ),
-            da_config.unwrap_or_default(),
-            sequencer_url,
-            sequencer_headers,
-            historical_rpc,
-            enable_tx_conditional,
-            min_suggested_priority_fee,
-        )
-    }
-
-    /// Builds an instance of [`OpAddOns`].
-    pub fn build_without_hooks<PVB, EB, EVB>(
         self,
     ) -> OpAddOns<OpEthApiBuilder<NetworkT>, PVB, EB, EVB, RpcMiddleware>
     where
@@ -889,6 +861,20 @@ pub struct OpAddOns<
     min_suggested_priority_fee: u64,
 }
 
+impl Default for OpAddOns<OpEthApiBuilder, OpEngineValidatorBuilder> {
+    fn default() -> Self {
+        Self::new(
+            RpcAddOns::default(),
+            OpDAConfig::default(),
+            None,
+            Vec::new(),
+            None,
+            false,
+            1_000_000,
+        )
+    }
+}
+
 impl<EthB, PVB, EB, EVB, RpcMiddleware> OpAddOns<EthB, PVB, EB, EVB, RpcMiddleware> {
     /// Creates a new instance from components.
     pub const fn new(
@@ -1075,9 +1061,8 @@ where
             ctx.node.provider().clone(),
         );
 
-        // Launch with empty hooks - hooks should be passed from the outer AddOns wrapper
         rpc_add_ons
-            .launch_with_hooks(ctx, RpcHooks::default(), move |container| {
+            .launch_add_ons_with(ctx, move |container| {
                 let reth_node_builder::rpc::RpcModuleContainer { modules, auth_module, registry } =
                     container;
 

@@ -40,13 +40,13 @@ use reth_ethereum::{
         },
         builder::{
             components::{BasicPayloadServiceBuilder, ComponentsBuilder, PayloadBuilderBuilder},
-            rpc::PayloadValidatorBuilder,
+            rpc::{PayloadValidatorBuilder, RpcAddOns},
             BuilderContext, Node, NodeBuilder,
         },
         core::{args::RpcServerArgs, node_config::NodeConfig},
         node::{
-            EthereumAddOns, EthereumConsensusBuilder, EthereumExecutorBuilder,
-            EthereumNetworkBuilder, EthereumPoolBuilder,
+            EthereumConsensusBuilder, EthereumExecutorBuilder, EthereumNetworkBuilder,
+            EthereumPoolBuilder,
         },
         EthEvmConfig, EthereumEthApiBuilder,
     },
@@ -281,7 +281,7 @@ impl NodeTypes for MyCustomNode {
 }
 
 /// Custom addons configuring RPC types
-pub type MyNodeAddOns = EthereumAddOns<EthereumEthApiBuilder, CustomEngineValidatorBuilder>;
+pub type MyNodeAddOns = RpcAddOns<EthereumEthApiBuilder, CustomEngineValidatorBuilder>;
 
 /// Implement the Node trait for the custom node
 ///
@@ -311,17 +311,7 @@ where
     }
 
     fn add_ons(&self) -> Self::AddOns {
-        use reth_ethereum::node::builder::rpc::{
-            BasicEngineApiBuilder, BasicEngineValidatorBuilder, RpcAddOns,
-        };
-
-        EthereumAddOns::new(RpcAddOns::new(
-            EthereumEthApiBuilder::default(),
-            CustomEngineValidatorBuilder::default(),
-            BasicEngineApiBuilder::default(),
-            BasicEngineValidatorBuilder::default(),
-            Default::default(),
-        ))
+        MyNodeAddOns::default()
     }
 }
 

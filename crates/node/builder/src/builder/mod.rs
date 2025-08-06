@@ -41,7 +41,6 @@ use std::{fmt::Debug, sync::Arc};
 use tracing::{info, trace, warn};
 
 pub mod add_ons;
-pub use add_ons::AddOnsWithRpcHooks;
 
 mod states;
 pub use states::*;

@@ -47,12 +47,7 @@ impl<T: FullNodeTypes> NodeBuilderWithTypes<T> {
             config,
             adapter,
             components_builder,
-            add_ons: AddOns {
-                hooks: NodeHooks::default(),
-                rpc_hooks: (),
-                exexs: Vec::new(),
-                add_ons: (),
-            },
+            add_ons: AddOns { hooks: NodeHooks::default(), exexs: Vec::new(), add_ons: () },
         }
     }
 }
@@ -178,12 +173,7 @@ where
             config,
             adapter,
             components_builder,
-            add_ons: AddOns {
-                hooks: NodeHooks::default(),
-                rpc_hooks: (),
-                exexs: Vec::new(),
-                add_ons,
-            },
+            add_ons: AddOns { hooks: NodeHooks::default(), exexs: Vec::new(), add_ons },
         }
     }
 }
@@ -270,7 +260,6 @@ where
 }
 
 // Hook configuration methods for types using RethRpcAddOns
-// In the new pattern, hooks are passed at launch time, so these methods are no-ops
 impl<T, CB, AO> NodeBuilderWithComponents<T, CB, AO>
 where
     T: FullNodeTypes,
@@ -279,8 +268,7 @@ where
 {
     /// Sets the hook that is run once the rpc server is started.
     ///
-    /// Note: In the new architecture, hooks are passed at launch time.
-    /// This method is kept for compatibility but does not store hooks.
+    /// Note: This is a no-op because hooks are now passed at launch time.
     pub fn on_rpc_started<F>(self, _hook: F) -> Self
     where
         F: FnOnce(
@@ -290,21 +278,18 @@ where
             + Send
             + 'static,
     {
-        // In the new pattern, hooks are passed at launch time
         self
     }
 
     /// Sets the hook that is run to configure the rpc modules.
     ///
-    /// Note: In the new architecture, hooks are passed at launch time.
-    /// This method is kept for compatibility but does not store hooks.
+    /// Note: This is a no-op because hooks are now passed at launch time.
     pub fn extend_rpc_modules<F>(self, _hook: F) -> Self
     where
         F: FnOnce(RpcContext<'_, NodeAdapter<T, CB::Components>, AO::EthApi>) -> eyre::Result<()>
             + Send
             + 'static,
     {
-        // In the new pattern, hooks are passed at launch time
         self
     }
 }

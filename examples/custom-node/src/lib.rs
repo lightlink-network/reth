@@ -20,7 +20,6 @@ use primitives::CustomNodePrimitives;
 use reth_ethereum::node::api::{FullNodeTypes, NodeTypes};
 use reth_node_builder::{
     components::{BasicPayloadServiceBuilder, ComponentsBuilder},
-    rpc::BasicEngineValidatorBuilder,
     Node,
 };
 use reth_op::{
@@ -69,7 +68,6 @@ where
         OpEthApiBuilder<CustomRpcTypes>,
         CustomEngineValidatorBuilder,
         CustomEngineApiBuilder,
-        BasicEngineValidatorBuilder<CustomEngineValidatorBuilder>,
     >;
 
     fn components_builder(&self) -> Self::ComponentsBuilder {

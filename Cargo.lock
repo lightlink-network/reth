@@ -3505,7 +3505,6 @@ dependencies = [
  "eyre",
  "futures",
  "jsonrpsee",
- "op-alloy-network",
  "reth-db",
  "reth-node-api",
  "reth-node-builder",
