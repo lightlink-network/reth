@@ -5,11 +5,11 @@ use futures::StreamExt;
 use reth_chainspec::ChainSpec;
 use reth_node_api::{BlockBody, FullNodeComponents, FullNodePrimitives, NodeTypes};
 use reth_node_builder::{
-    rpc::RethRpcAddOnsWithoutHooks, DebugNodeLauncher, EngineNodeLauncher, FullNode, NodeBuilder,
-    NodeConfig, NodeHandle,
+    rpc::RethRpcAddOns, DebugNodeLauncher, EngineNodeLauncher, FullNode, NodeBuilder, NodeConfig,
+    NodeHandle,
 };
 use reth_node_core::args::DevArgs;
-use reth_node_ethereum::{node::EthereumAddOnsWithoutHooks, EthereumNode};
+use reth_node_ethereum::{node::EthereumAddOns, EthereumNode};
 use reth_provider::{providers::BlockchainProvider, CanonStateSubscriptions};
 use reth_rpc_eth_api::helpers::EthTransactions;
 use reth_tasks::TaskManager;
@@ -28,7 +28,7 @@ async fn can_run_dev_node() -> eyre::Result<()> {
         .testing_node(exec.clone())
         .with_types_and_provider::<EthereumNode, BlockchainProvider<_>>()
         .with_components(EthereumNode::components())
-        .with_add_ons(EthereumAddOnsWithoutHooks::default())
+        .with_add_ons(EthereumAddOns::default())
         .launch_with_fn(|builder| {
             let engine_launcher = EngineNodeLauncher::new(
                 builder.task_executor().clone(),
@@ -48,7 +48,7 @@ async fn can_run_dev_node() -> eyre::Result<()> {
 async fn assert_chain_advances<N, AddOns>(node: FullNode<N, AddOns>)
 where
     N: FullNodeComponents<Provider: CanonStateSubscriptions>,
-    AddOns: RethRpcAddOnsWithoutHooks<N, EthApi: EthTransactions>,
+    AddOns: RethRpcAddOns<N, EthApi: EthTransactions>,
     N::Types: NodeTypes<Primitives: FullNodePrimitives>,
 {
     let mut notifications = node.provider.canonical_state_stream();

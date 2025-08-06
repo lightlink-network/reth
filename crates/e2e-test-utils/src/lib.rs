@@ -7,7 +7,7 @@ use reth_engine_local::LocalPayloadAttributesBuilder;
 use reth_network_api::test_utils::PeersHandleProvider;
 use reth_node_builder::{
     components::NodeComponentsBuilder,
-    rpc::{EngineValidatorAddOn, RethRpcAddOnsWithoutHooks},
+    rpc::{EngineValidatorAddOn, RethRpcAddOns},
     EngineNodeLauncher, FullNodeTypesAdapter, Node, NodeAdapter, NodeBuilder, NodeComponents,
     NodeConfig, NodeHandle, NodePrimitives, NodeTypes, NodeTypesWithDBAdapter,
     PayloadAttributesBuilder, PayloadTypes,
@@ -58,7 +58,7 @@ where
         TmpNodeAdapter<N>,
         Components: NodeComponents<TmpNodeAdapter<N>, Network: PeersHandleProvider>,
     >,
-    N::AddOns: RethRpcAddOnsWithoutHooks<Adapter<N>> + EngineValidatorAddOn<Adapter<N>>,
+    N::AddOns: RethRpcAddOns<Adapter<N>> + EngineValidatorAddOn<Adapter<N>>,
     LocalPayloadAttributesBuilder<N::ChainSpec>:
         PayloadAttributesBuilder<<<N as NodeTypes>::Payload as PayloadTypes>::PayloadAttributes>,
 {
@@ -262,7 +262,7 @@ where
                     Network: PeersHandleProvider,
                 >,
             >,
-            AddOns: RethRpcAddOnsWithoutHooks<
+            AddOns: RethRpcAddOns<
                 Adapter<Self, BlockchainProvider<NodeTypesWithDBAdapter<Self, TmpDB>>>,
             > + EngineValidatorAddOn<
                 Adapter<Self, BlockchainProvider<NodeTypesWithDBAdapter<Self, TmpDB>>>,
@@ -296,7 +296,7 @@ where
                     Network: PeersHandleProvider,
                 >,
             >,
-            AddOns: RethRpcAddOnsWithoutHooks<
+            AddOns: RethRpcAddOns<
                 Adapter<Self, BlockchainProvider<NodeTypesWithDBAdapter<Self, TmpDB>>>,
             > + EngineValidatorAddOn<
                 Adapter<Self, BlockchainProvider<NodeTypesWithDBAdapter<Self, TmpDB>>>,

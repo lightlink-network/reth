@@ -20,7 +20,7 @@ use reth_ethereum::{
         api::{node::FullNodeTypes, NodeTypes},
         builder::{components::PayloadServiceBuilder, BuilderContext},
         core::cli::config::PayloadBuilderConfig,
-        node::EthereumAddOnsWithoutHooks,
+        node::EthereumAddOns,
         EthEngineTypes, EthEvmConfig, EthereumNode,
     },
     pool::{PoolTransaction, TransactionPool},
@@ -99,7 +99,7 @@ fn main() {
                 .with_components(
                     EthereumNode::components().payload(CustomPayloadBuilder::default()),
                 )
-                .with_add_ons(EthereumAddOnsWithoutHooks::default())
+                .with_add_ons(EthereumAddOns::default())
                 .launch()
                 .await?;
 

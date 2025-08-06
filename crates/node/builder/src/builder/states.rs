@@ -9,7 +9,7 @@ use crate::{
     components::{NodeComponents, NodeComponentsBuilder},
     hooks::NodeHooks,
     launch::LaunchNode,
-    rpc::{RethRpcAddOnsWithoutHooks, RethRpcServerHandles, RpcContext},
+    rpc::{RethRpcAddOns, RethRpcServerHandles, RpcContext},
     AddOns, ComponentsFor, FullNode,
 };
 
@@ -258,7 +258,7 @@ impl<T, CB, AO> NodeBuilderWithComponents<T, CB, AO>
 where
     T: FullNodeTypes,
     CB: NodeComponentsBuilder<T>,
-    AO: RethRpcAddOnsWithoutHooks<NodeAdapter<T, CB::Components>>,
+    AO: RethRpcAddOns<NodeAdapter<T, CB::Components>>,
 {
     /// Launches the node with the given launcher.
     pub async fn launch_with<L>(self, launcher: L) -> eyre::Result<L::Node>
@@ -269,13 +269,13 @@ where
     }
 }
 
-// Hook configuration methods for types using RethRpcAddOnsWithoutHooks
+// Hook configuration methods for types using RethRpcAddOns
 // In the new pattern, hooks are passed at launch time, so these methods are no-ops
 impl<T, CB, AO> NodeBuilderWithComponents<T, CB, AO>
 where
     T: FullNodeTypes,
     CB: NodeComponentsBuilder<T>,
-    AO: RethRpcAddOnsWithoutHooks<NodeAdapter<T, CB::Components>>,
+    AO: RethRpcAddOns<NodeAdapter<T, CB::Components>>,
 {
     /// Sets the hook that is run once the rpc server is started.
     ///

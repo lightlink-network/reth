@@ -1,5 +1,5 @@
 use super::LaunchNode;
-use crate::{rpc::RethRpcAddOnsWithoutHooks, EngineNodeLauncher, Node, NodeHandle};
+use crate::{rpc::RethRpcAddOns, EngineNodeLauncher, Node, NodeHandle};
 use alloy_provider::network::AnyNetwork;
 use jsonrpsee::core::{DeserializeOwned, Serialize};
 use reth_chainspec::EthChainSpec;
@@ -107,7 +107,7 @@ impl<L> DebugNodeLauncher<L> {
 impl<L, Target, N, AddOns> LaunchNode<Target> for DebugNodeLauncher<L>
 where
     N: FullNodeComponents<Types: DebugNode<N>>,
-    AddOns: RethRpcAddOnsWithoutHooks<N>,
+    AddOns: RethRpcAddOns<N>,
     L: LaunchNode<Target, Node = NodeHandle<N, AddOns>>,
 {
     type Node = NodeHandle<N, AddOns>;
