@@ -556,8 +556,7 @@ impl SparseTrieInterface for SerialSparseTrie {
         Ok(())
     }
 
-    fn reveal_nodes(&mut self, mut nodes: Vec<RevealedSparseNode>) -> SparseTrieResult<()> {
-        nodes.sort_unstable_by_key(|node| node.path);
+    fn reveal_nodes(&mut self, nodes: Vec<RevealedSparseNode>) -> SparseTrieResult<()> {
         for node in nodes {
             self.reveal_node(node.path, node.node, node.masks)?;
         }
