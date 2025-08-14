@@ -1,0 +1,20 @@
+[package]
+name = "reth-gas-station"
+version = "0.0.1"
+authors = ["LightLink <team@lightlink.io>"] 
+edition = "2021"
+license = "MIT OR Apache-2.0"
+
+[lib]
+name = "reth_gas_station"
+path = "src/lib.rs"
+
+[dependencies]
+alloy-primitives = { workspace = true }
+alloy-rlp = { workspace = true }
+reth-storage-api = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+hex = "0.4"
+

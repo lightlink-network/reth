@@ -42,6 +42,7 @@ members = [
     "crates/ethereum/payload/",
     "crates/ethereum/primitives/",
     "crates/ethereum/reth/",
+    "crates/gas-station/",
     "crates/etl/",
     "crates/evm/evm",
     "crates/evm/execution-errors",
