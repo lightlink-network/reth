@@ -187,7 +187,7 @@ where
             return TransactionValidationOutcome::Invalid(
                 transaction,
                 InvalidTransactionError::TxTypeNotSupported.into(),
-            )
+            );
         }
 
         // Interop cross tx validation
@@ -199,7 +199,7 @@ where
                     }
                     err => InvalidPoolTransactionError::Other(Box::new(err)),
                 };
-                return TransactionValidationOutcome::Invalid(transaction, err)
+                return TransactionValidationOutcome::Invalid(transaction, err);
             }
             Some(Ok(_)) => {
                 // valid interop tx
@@ -222,7 +222,7 @@ where
     ) -> TransactionValidationOutcome<Tx> {
         if !self.requires_l1_data_gas_fee() {
             // no need to check L1 gas fee
-            return outcome
+            return outcome;
         }
         // ensure that the account has enough balance to cover the L1 gas cost
         if let TransactionValidationOutcome::Valid {
@@ -234,6 +234,27 @@ where
             authorities,
         } = outcome
         {
+            // Bypass L1 data gas cost requirement for gasless transactions
+            let tx = valid_tx.transaction();
+            let is_gasless = match tx.ty() {
+                alloy_consensus::constants::LEGACY_TX_TYPE_ID => tx.priority_fee_or_price() == 0,
+                alloy_consensus::constants::EIP1559_TX_TYPE_ID => {
+                    tx.max_fee_per_gas() == 0 && tx.max_priority_fee_per_gas() == Some(0)
+                }
+                _ => false,
+            };
+
+            if is_gasless {
+                return TransactionValidationOutcome::Valid {
+                    balance,
+                    state_nonce,
+                    transaction: valid_tx,
+                    propagate,
+                    bytecode_hash,
+                    authorities,
+                };
+            }
+
             let mut l1_block_info = self.block_info.l1_block_info.read().clone();
 
             let encoded = valid_tx.transaction().encoded_2718();
@@ -259,7 +280,7 @@ where
                         GotExpected { got: balance, expected: cost }.into(),
                     )
                     .into(),
-                )
+                );
             }
 
             return TransactionValidationOutcome::Valid {
@@ -269,7 +290,7 @@ where
                 propagate,
                 bytecode_hash,
                 authorities,
-            }
+            };
         }
         outcome
     }
