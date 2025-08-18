@@ -83,6 +83,13 @@ where
         base_fee: u64,
     ) -> Priority<Self::PriorityValue> {
         transaction.effective_tip_per_gas(base_fee).map(U256::from).into()
+        // TODO: give top priority to gasless transactions
+        // match transaction.effective_tip_per_gas(base_fee) {
+        //     Some(tip) => Priority::Value(U256::from(tip)),
+        //     // Gasless transactions (no effective tip) get the highest priority to ensure they are
+        //     // selected for inclusion.
+        //     Some(0) => Priority::Value(U256::MAX),
+        // }
     }
 }
 
