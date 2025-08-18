@@ -281,8 +281,8 @@ too_long_first_doc_paragraph = "allow"
 # NOTE: Debuggers may provide less useful information with this setting.
 # Uncomment this section if you're using a debugger.
 [profile.dev]
-# https://davidlattimore.github.io/posts/2024/02/04/speeding-up-the-rust-edit-build-run-cycle.html
-debug = "line-tables-only"
+# Use full debug info so debuggers (LLDB/CodeLLDB) can show local variables and complex types.
+debug = "full"
 split-debuginfo = "unpacked"
 
 # Speed up tests.
@@ -457,7 +457,7 @@ reth-ress-protocol = { path = "crates/ress/protocol" }
 reth-ress-provider = { path = "crates/ress/provider" }
 
 # revm
-revm = { version = "28.0.1", default-features = false }
+revm = { version = "28.0.1", default-features = false, features = ["optional_gasless"] }
 revm-bytecode = { version = "6.0.1", default-features = false }
 revm-database = { version = "7.0.1", default-features = false }
 revm-state = { version = "7.0.1", default-features = false }

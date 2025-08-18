@@ -136,7 +136,10 @@ where
     fn evm_env(&self, header: &Header) -> EvmEnv<OpSpecId> {
         let spec = config::revm_spec(self.chain_spec(), header);
 
-        let cfg_env = CfgEnv::new().with_chain_id(self.chain_spec().chain().id()).with_spec(spec);
+        let mut cfg_env = CfgEnv::new().with_chain_id(self.chain_spec().chain().id()).with_spec(spec);
+
+        // Enable per-tx gasless validation bypass in lightlink revm
+        cfg_env.allow_gasless = true;
 
         let blob_excess_gas_and_price = spec
             .into_eth_spec()
@@ -175,8 +178,10 @@ where
         let spec_id = revm_spec_by_timestamp_after_bedrock(self.chain_spec(), attributes.timestamp);
 
         // configure evm env based on parent block
-        let cfg_env =
+        let mut cfg_env =
             CfgEnv::new().with_chain_id(self.chain_spec().chain().id()).with_spec(spec_id);
+        // Enable per-tx gasless validation bypass in forked revm
+        cfg_env.allow_gasless = true;
 
         // if the parent block did not have excess blob gas (i.e. it was pre-cancun), but it is
         // cancun now, we need to set the excess blob gas to the default value(0)

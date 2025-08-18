@@ -10530,6 +10530,7 @@ dependencies = [
  "reth-execution-types",
  "reth-fs-util",
  "reth-metrics",
+ "reth-optimism-primitives",
  "reth-primitives-traits",
  "reth-provider",
  "reth-storage-api",
