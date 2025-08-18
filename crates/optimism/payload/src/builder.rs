@@ -44,6 +44,7 @@ use reth_transaction_pool::{BestTransactionsAttributes, PoolTransaction, Transac
 use revm::context::{Block, BlockEnv};
 use std::sync::Arc;
 use tracing::{debug, trace, warn};
+use reth_optimism_primitives::is_gasless;
 
 /// Optimism's payload builder
 #[derive(Debug, Clone)]
@@ -315,7 +316,8 @@ impl<Txs> OpBuilder<'_, Txs> {
             }
 
             // check if the new payload is even more valuable
-            if !ctx.is_better_payload(info.total_fees) {
+            // if fees are equal but we included any mempool transactions (e.g. gasless), still proceed
+            if !ctx.is_better_payload(info.total_fees) && !info.included_any_mempool_tx {
                 // can skip building the block
                 return Ok(BuildOutcomeKind::Aborted { fees: info.total_fees })
             }
@@ -442,12 +444,19 @@ pub struct ExecutionInfo {
     pub cumulative_da_bytes_used: u64,
     /// Tracks fees from executed mempool transactions
     pub total_fees: U256,
+    /// True if at least one mempool transaction was executed in this payload attempt
+    pub included_any_mempool_tx: bool,
 }
 
 impl ExecutionInfo {
     /// Create a new instance with allocated slots.
     pub const fn new() -> Self {
-        Self { cumulative_gas_used: 0, cumulative_da_bytes_used: 0, total_fees: U256::ZERO }
+        Self {
+            cumulative_gas_used: 0,
+            cumulative_da_bytes_used: 0,
+            total_fees: U256::ZERO,
+            included_any_mempool_tx: false,
+        }
     }
 
     /// Returns true if the transaction would exceed the block limits:
@@ -707,11 +716,16 @@ where
             info.cumulative_gas_used += gas_used;
             info.cumulative_da_bytes_used += tx_da_size;
 
-            // update add to total fees
-            let miner_fee = tx
-                .effective_tip_per_gas(base_fee)
-                .expect("fee is always valid; execution succeeded");
-            info.total_fees += U256::from(miner_fee) * U256::from(gas_used);
+            if !is_gasless(tx.as_ref()) {
+                // update add to total fees; gasless transactions pay no miner fee
+                let miner_fee = tx
+                    .effective_tip_per_gas(base_fee)
+                    .expect("fee is always valid; execution succeeded");
+                info.total_fees += U256::from(miner_fee) * U256::from(gas_used);
+            }
+
+            // mark that we executed at least one mempool transaction
+            info.included_any_mempool_tx = true;
         }
 
         Ok(None)

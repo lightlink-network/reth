@@ -41,6 +41,7 @@ use std::{
     sync::Arc,
 };
 use tracing::trace;
+use reth_optimism_primitives::is_gasless;
 
 #[cfg_attr(doc, aquamarine::aquamarine)]
 // TODO: Inlined diagram due to a bug in aquamarine library, should become an include when it's
@@ -1563,6 +1564,12 @@ impl<T: PoolTransaction> AllTransactions<T> {
     /// Rechecks the transaction's dynamic fee condition.
     fn update_tx_base_fee(pending_block_base_fee: u64, tx: &mut PoolInternalTransaction<T>) {
         // Recheck dynamic fee condition.
+        // Gasless transactions (no effective tip) should always satisfy fee-cap for selection.
+        if is_gasless(&tx.transaction.transaction) {
+            tx.state.insert(TxState::ENOUGH_FEE_CAP_BLOCK);
+            return
+        }
+
         match tx.transaction.max_fee_per_gas().cmp(&(pending_block_base_fee as u128)) {
             Ordering::Greater | Ordering::Equal => {
                 tx.state.insert(TxState::ENOUGH_FEE_CAP_BLOCK);
@@ -1925,19 +1932,20 @@ impl<T: PoolTransaction> AllTransactions<T> {
 
         // Check dynamic fee. Bypass protocol basefee check for gasless transactions (0/0 or legacy 0).
         let fee_cap = transaction.max_fee_per_gas();
-        let is_gasless = match transaction.tx_type() {
-            LEGACY_TX_TYPE_ID => transaction.priority_fee_or_price() == 0,
-            EIP1559_TX_TYPE_ID => {
-                transaction.max_fee_per_gas() == 0 && transaction.priority_fee_or_price() == 0
-            }
-            _ => false,
-        };
 
-        if !is_gasless && fee_cap < self.minimal_protocol_basefee as u128 {
-            return Err(InsertErr::FeeCapBelowMinimumProtocolFeeCap { transaction, fee_cap });
-        }
-        if is_gasless || fee_cap >= self.pending_fees.base_fee as u128 {
+        // Gasless transactions (no effective tip) should always be eligible with respect to
+        // basefee, provided they meet the minimal protocol fee cap requirement. This ensures they
+        // are returned by best_transactions.
+        if is_gasless(&transaction.transaction) {
+            // Mark as satisfying fee cap regardless of current pending base fee.
             state.insert(TxState::ENOUGH_FEE_CAP_BLOCK);
+        } else {
+            if fee_cap < self.minimal_protocol_basefee as u128 {
+                return Err(InsertErr::FeeCapBelowMinimumProtocolFeeCap { transaction, fee_cap })
+            }
+            if fee_cap >= self.pending_fees.base_fee as u128 {
+                state.insert(TxState::ENOUGH_FEE_CAP_BLOCK);
+            }
         }
 
         // placeholder for the replaced transaction, if any
@@ -2989,6 +2997,21 @@ mod tests {
         let InsertOk { state, .. } =
             pool.insert_tx(f.validated(tx), on_chain_balance, on_chain_nonce).unwrap();
         assert!(state.contains(TxState::NOT_TOO_MUCH_GAS));
+    }
+
+    #[test]
+    fn accept_legacy_zero_gas_price() {
+        let on_chain_balance = U256::ZERO;
+        let on_chain_nonce = 0;
+        let mut f = MockTransactionFactory::default();
+        let mut pool = AllTransactions::default();
+
+        // Legacy (type 0) tx with gas price 0 and sufficient gas limit for a simple call
+        let tx =
+            MockTransaction::legacy().with_gas_price(0).with_gas_limit(21_000).with_value(U256::ZERO);
+
+        // Should be accepted by the pool
+        let _ok = pool.insert_tx(f.validated(tx), on_chain_balance, on_chain_nonce).unwrap();
     }
 
     #[test]

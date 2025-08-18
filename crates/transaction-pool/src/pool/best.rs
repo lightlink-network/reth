@@ -15,6 +15,7 @@ use std::{
 };
 use tokio::sync::broadcast::{error::TryRecvError, Receiver};
 use tracing::debug;
+use reth_optimism_primitives::is_gasless;
 
 /// An iterator that returns transactions that can be executed on the current state (*best*
 /// transactions).
@@ -54,8 +55,10 @@ impl<T: TransactionOrdering> Iterator for BestTransactionsWithFees<T> {
         loop {
             let best = Iterator::next(&mut self.best)?;
             // If both the base fee and blob fee (if applicable for EIP-4844) are satisfied, return
-            // the transaction
-            if best.transaction.max_fee_per_gas() >= self.base_fee as u128 &&
+            // the transaction. For gasless transactions (priority fee or legacy price == 0) we
+            // bypass base fee filtering entirely so they can be considered for inclusion.
+            if (is_gasless(&best.transaction) ||
+                best.transaction.max_fee_per_gas() >= self.base_fee as u128) &&
                 best.transaction
                     .max_fee_per_blob_gas()
                     .is_none_or(|fee| fee >= self.base_fee_per_blob_gas as u128)
