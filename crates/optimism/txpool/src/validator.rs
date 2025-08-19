@@ -238,15 +238,7 @@ where
         {
             // Bypass L1 data gas cost requirement for gasless transactions
             let tx = valid_tx.transaction();
-            let is_gasless = match tx.ty() {
-                alloy_consensus::constants::LEGACY_TX_TYPE_ID => tx.priority_fee_or_price() == 0,
-                alloy_consensus::constants::EIP1559_TX_TYPE_ID => {
-                    tx.max_fee_per_gas() == 0 && tx.max_priority_fee_per_gas() == Some(0)
-                }
-                _ => false,
-            };
-
-            if is_gasless {
+            if is_gasless(tx) {
                 return TransactionValidationOutcome::Valid {
                     balance,
                     state_nonce,
