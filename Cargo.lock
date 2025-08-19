@@ -9360,6 +9360,7 @@ dependencies = [
  "reth-chainspec",
  "reth-evm",
  "reth-execution-types",
+ "reth-gas-station",
  "reth-optimism-evm",
  "reth-optimism-forks",
  "reth-optimism-primitives",

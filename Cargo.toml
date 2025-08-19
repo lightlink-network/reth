@@ -377,6 +377,7 @@ reth-exex = { path = "crates/exex/exex" }
 reth-exex-test-utils = { path = "crates/exex/test-utils" }
 reth-exex-types = { path = "crates/exex/types" }
 reth-fs-util = { path = "crates/fs-util" }
+reth-gas-station = { path = "crates/gas-station" }
 reth-invalid-block-hooks = { path = "crates/engine/invalid-block-hooks" }
 reth-ipc = { path = "crates/rpc/ipc" }
 reth-libmdbx = { path = "crates/storage/libmdbx-rs" }
@@ -768,16 +769,3 @@ revm-inspector = { git = "https://github.com/lightlink-network/revm", branch = "
 # jsonrpsee-server = { git = "https://github.com/paradigmxyz/jsonrpsee", branch = "matt/make-rpc-service-pub" }
 # jsonrpsee-http-client = { git = "https://github.com/paradigmxyz/jsonrpsee", branch = "matt/make-rpc-service-pub" }
 # jsonrpsee-types = { git = "https://github.com/paradigmxyz/jsonrpsee", branch = "matt/make-rpc-service-pub" }
-
-[patch.crates-io]
-revm = { path = "/Users/dan/dev/lightlink-network/revm/crates/revm" }
-revm-primitives = { path = "/Users/dan/dev/lightlink-network/revm/crates/primitives" }
-revm-interpreter = { path = "/Users/dan/dev/lightlink-network/revm/crates/interpreter" }
-revm-handler = { path = "/Users/dan/dev/lightlink-network/revm/crates/handler" }
-revm-context = { path = "/Users/dan/dev/lightlink-network/revm/crates/context" }
-revm-context-interface = { path = "/Users/dan/dev/lightlink-network/revm/crates/context/interface" }
-revm-state = { path = "/Users/dan/dev/lightlink-network/revm/crates/state" }
-revm-database = { path = "/Users/dan/dev/lightlink-network/revm/crates/database" }
-revm-database-interface = { path = "/Users/dan/dev/lightlink-network/revm/crates/database/interface" }
-revm-bytecode = { path = "/Users/dan/dev/lightlink-network/revm/crates/bytecode" }
-revm-inspector = { path = "/Users/dan/dev/lightlink-network/revm/crates/inspector" }
