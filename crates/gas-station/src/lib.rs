@@ -276,14 +276,12 @@ pub struct GaslessPostExecEffects {
 /// Computes the post-execution effects for a gasless transaction:
 /// - Deducts `gas_used` from the contract's credits (saturating at 0)
 /// - If single-use is enabled, marks `from` as used in `usedAddresses` mapping
-/// - Prepares a `CreditsUsed` log
-///
-/// This is a pure function that only depends on a read accessor for current storage values and
-/// returns the necessary writes and the log to emit. The caller is responsible for applying the
-/// writes to the execution state and attaching the log to the transaction receipt.
+/// Returns a struct with the storage writes and the log to emit.
+/// 
+/// NOTE: DOESNT ACTUALLY APPLY CHANGES!!!!
+/// see `apply_gasless_post_exec`...
 pub fn compute_gasless_post_exec_effects(
     cfg: &GasStationConfig,
-    gas_station_storage_location: B256,
     to: Address,
     from: Address,
     gas_used: u64,
@@ -294,21 +292,19 @@ pub fn compute_gasless_post_exec_effects(
         return GaslessPostExecEffects::default();
     }
 
-    // Derive all relevant slots for this (to, from) pair.
     let slots = calculate_gas_station_slots(to);
 
-    // Read current credits and compute the deduction (saturating at 0).
+    // Calculate new credits
     let available_credits = read_slot(slots.credits_slot);
     let gas_used_u256 = U256::from(gas_used);
-    let new_credits = available_credits.saturating_sub(gas_used_u256);
-
-    // Check if single-use is enabled.
-    let single_use_enabled = read_slot(slots.single_use_enabled_slot) != U256::ZERO;
-
+    let new_credits = available_credits.saturating_sub(gas_used_u256); // saturating means if it goes below 0, it stays at 0, no underflow
+    
     // Prepare storage writes
     let mut storage_writes = Vec::with_capacity(2);
     storage_writes.push((slots.credits_slot, new_credits));
-
+    
+    // - if single use mark it as used
+    let single_use_enabled = read_slot(slots.single_use_enabled_slot) != U256::ZERO;
     if single_use_enabled {
         let used_addresses_slot = calculate_nested_mapping_slot(from, slots.used_addresses_map_base_slot);
         storage_writes.push((used_addresses_slot, U256::from(1u64)));
