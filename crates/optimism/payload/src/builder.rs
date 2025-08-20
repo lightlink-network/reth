@@ -41,8 +41,9 @@ use reth_storage_api::{errors::ProviderError, StateProvider, StateProviderFactor
 use reth_transaction_pool::{BestTransactionsAttributes, PoolTransaction, TransactionPool};
 use revm::context::{Block, BlockEnv};
 use std::{marker::PhantomData, sync::Arc};
-use tracing::{debug, trace, warn};
+use tracing::{info, debug, trace, warn};
 use reth_optimism_primitives::is_gasless;
+use reth_gas_station::{validate_gasless_tx, GasStationConfig, GAS_STATION_PREDEPLOY, GAS_STATION_STORAGE_LOCATION};
 
 /// Optimism's payload builder
 #[derive(Debug)]
@@ -355,7 +356,10 @@ impl<Txs> OpBuilder<'_, Txs> {
         // 3. if mem pool transactions are requested we execute them
         if !ctx.attributes().no_tx_pool() {
             let best_txs = best(ctx.best_transaction_attributes(builder.evm_mut().block()));
-            if ctx.execute_best_transactions(&mut info, &mut builder, best_txs)?.is_some() {
+            if ctx
+                .execute_best_transactions(&mut info, &mut builder, &state_provider, best_txs)?
+                .is_some()
+            {
                 return Ok(BuildOutcomeKind::Cancelled)
             }
 
@@ -664,6 +668,7 @@ where
         &self,
         info: &mut ExecutionInfo,
         builder: &mut impl BlockBuilder<Primitives = Evm::Primitives>,
+        state_provider: &impl StateProvider,
         mut best_txs: impl PayloadTransactions<
             Transaction: PoolTransaction<Consensus = TxTy<Evm::Primitives>> + OpPooledTx,
         >,
@@ -708,6 +713,39 @@ where
             // check if the job was cancelled, if so we can exit early
             if self.cancel.is_cancelled() {
                 return Ok(Some(()))
+            }
+
+            // validate the gasless transaction
+            if is_gasless(tx.as_ref()) {
+                // do we allow create transactions???
+                let to = match tx.kind() {
+                    alloy_primitives::TxKind::Call(to) => to,
+                    alloy_primitives::TxKind::Create => {
+                        info!("gasless transaction is a create transaction, skipping");
+                        best_txs.mark_invalid(tx.signer(), tx.nonce());
+                        continue
+                    }
+                };
+                let from = tx.signer();
+                let gas_limit = tx.gas_limit();
+                let mut gas_cfg = GasStationConfig::default();
+                // temporary enable gasless transactions
+                // Idk where to put this config, it can be a run time flag???
+                gas_cfg.enabled = true;
+                gas_cfg.address = GAS_STATION_PREDEPLOY;
+                if let Err(_e) = validate_gasless_tx(
+                    &gas_cfg,
+                    state_provider,
+                    GAS_STATION_STORAGE_LOCATION,
+                    to,
+                    from,
+                    gas_limit,
+                    None,
+                ) {
+                    info!("gasless transaction validation failed: {:?}", _e);
+                    best_txs.mark_invalid(tx.signer(), tx.nonce());
+                    continue
+                }
             }
 
             let gas_used = match builder.execute_transaction(tx.clone()) {
