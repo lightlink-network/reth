@@ -40,7 +40,7 @@ pub const GAS_STATION_STORAGE_LOCATION: B256 =
 #[derive(Clone, Debug)]
 pub struct GasStationStorageSlots {
     pub registered_slot: B256,  // struct base slot (has registered/active packed)
-    pub active_slot: B256,      // same as registered_slot (both in packed struct)
+    pub active_slot: B256,  // TODO REMOVE THIS
     pub credits_slot: B256,     // credits slot
     pub nested_whitelist_map_base_slot: B256,  // base slot for the nested whitelist mapping
     pub whitelist_enabled_slot: B256,  // whitelist enabled flag
@@ -48,30 +48,28 @@ pub struct GasStationStorageSlots {
     pub used_addresses_map_base_slot: B256,  // base slot for the nested usedAddresses mapping
 }
 
-/// Calculates the storage slot hashes for a specific registered contract within the GasStation's `contracts` mapping.
-/// It returns the base slot for the struct (holding packed fields), the slot for credits,
+/// calculates the storage slot hashes for a specific registered contract within the GasStation's `contracts` mapping.
+/// it returns the base slot for the struct (holding packed fields), the slot for credits,
 /// the slot for whitelistEnabled, and the base slot for the nested whitelist mapping.
 pub fn calculate_gas_station_slots(registered_contract_address: Address) -> GasStationStorageSlots {
-    // The 'contracts' mapping is at offset 1 from the storage location
-    // (dao is at offset 0, contracts is at offset 1)
+	// The 'contracts' mapping is at offset 1 from the storage location
+	// (dao is at offset 0, contracts is at offset 1)
     let contracts_map_slot = U256::from_be_bytes(GAS_STATION_STORAGE_LOCATION.0) + U256::from(1);
 
     // Calculate the base slot for the struct entry in the mapping
-    // Left-pad the address to 32 bytes and combine with the map slot
+    // - left pad the address to 32 bytes
     let mut key_padded = [0u8; 32];
     key_padded[12..].copy_from_slice(registered_contract_address.as_slice()); // Left-pad 20-byte address to 32 bytes
-    
-    // Left-pad the map slot to 32 bytes (Go: common.LeftPadBytes(contractsMapSlot.Bytes(), 32))
+    // - I expect this is left padded because big endian etc
     let map_slot_padded = contracts_map_slot.to_be_bytes::<32>();
-    
-    // Combine: key first, then map slot (Go: append(keyPadded, mapSlotPadded...))
+    // - keccak256(append(keyPadded, mapSlotPadded...))
     let combined = [key_padded, map_slot_padded].concat();
     let struct_base_slot_hash = keccak256(combined);
 
-    // Calculate subsequent slots by adding offsets to the base slot hash
-    // New struct layout: bool registered, bool active, address admin (all packed in slot 0)
-    // uint256 credits (slot 1), bool whitelistEnabled (slot 2), mapping whitelist (slot 3)
-    // bool singleUseEnabled (slot 4), mapping usedAddresses (slot 5)
+	// Calculate subsequent slots by adding offsets to the base slot hash
+	// New struct layout: bool registered, bool active, address admin (all packed in slot 0)
+	// uint256 credits (slot 1), bool whitelistEnabled (slot 2), mapping whitelist (slot 3)
+	// bool singleUseEnabled (slot 4), mapping usedAddresses (slot 5)
     let struct_base_slot_u256 = U256::from_be_bytes(struct_base_slot_hash.0);
 
     // Slot for 'credits' (offset 1 from base - after the packed bools and address)
@@ -96,7 +94,7 @@ pub fn calculate_gas_station_slots(registered_contract_address: Address) -> GasS
 
     GasStationStorageSlots {
         registered_slot: struct_base_slot_hash,
-        active_slot: struct_base_slot_hash,  // Same slot, different packed fields
+        active_slot: struct_base_slot_hash,  
         credits_slot: credit_slot_hash,
         whitelist_enabled_slot: whitelist_enabled_slot_hash,
         single_use_enabled_slot: single_use_enabled_slot_hash,
