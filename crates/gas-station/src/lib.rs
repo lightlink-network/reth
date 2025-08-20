@@ -2,7 +2,7 @@
 // CalculateGasStationStorageSlots -> calculate_slots
 // ValidateGaslessTx -> validate_gasless_tx
 
-use alloy_primitives::{address, b256, keccak256, Address, B256, U256};
+use alloy_primitives::{address, b256, keccak256, Address, B256, Bytes, Log, U256};
 use reth_storage_api::StateProvider;
 
 #[derive(Clone, Debug)] // lets us clone (.clone()) and print debug info ("{:?}")
@@ -18,6 +18,7 @@ pub fn credits_used_topic0() -> B256 {
     // GUESS WE CAN PRECOMPUTE THIS AND HAVE IT A CONSTANT
     keccak256(b"CreditsUsed(address,address,uint256,uint256)")
 }
+
 
 /// predeploy local for GasStation by default
 pub const GAS_STATION_PREDEPLOY: Address = address!("0x4300000000000000000000000000000000000001");
@@ -38,98 +39,84 @@ pub const GAS_STATION_STORAGE_LOCATION: B256 =
 /// and optional `from`.
 #[derive(Clone, Debug)]
 pub struct GasStationStorageSlots {
-    pub contracts_slot: B256,
-    pub contract_slot: B256,
-    pub registered_slot: B256,
-    pub active_slot: B256,
-    pub admin_slot: B256,
-    pub credits_slot: B256,
-    pub whitelist_enabled_slot: B256,
-    pub single_use_enabled_slot: B256,
-    pub whitelist_user_slot: Option<B256>,
-    pub used_addresses_user_slot: Option<B256>,
+    pub registered_slot: B256,  // struct base slot (has registered/active packed)
+    pub active_slot: B256,      // same as registered_slot (both in packed struct)
+    pub credits_slot: B256,     // credits slot
+    pub nested_whitelist_map_base_slot: B256,  // base slot for the nested whitelist mapping
+    pub whitelist_enabled_slot: B256,  // whitelist enabled flag
+    pub single_use_enabled_slot: B256,  // single use enabled flag  
+    pub used_addresses_map_base_slot: B256,  // base slot for the nested usedAddresses mapping
 }
 
-/// computes storage slots according to solidity layout for
-/// mapping(address => GaslessContract) contracts
-/// and fields of GaslessContract etc
-pub fn calculate_slots(
-    gas_station_storage_location: B256,
-    to: Address,
-    from: Option<Address>,
-) -> GasStationStorageSlots {
-    // GasStationStorage Layout:
-    // 0: dao
-    // 1: contracts (mapping) -> mapping slot index 1 within the struct
-    // 2: creditPackages (mapping)
-    // 3: nextPackageId (u256)
-    // We need base slot for `contracts` to compute keccak(key . slot).
+/// Calculates the storage slot hashes for a specific registered contract within the GasStation's `contracts` mapping.
+/// It returns the base slot for the struct (holding packed fields), the slot for credits,
+/// the slot for whitelistEnabled, and the base slot for the nested whitelist mapping.
+pub fn calculate_gas_station_slots(registered_contract_address: Address) -> GasStationStorageSlots {
+    // The 'contracts' mapping is at offset 1 from the storage location
+    // (dao is at offset 0, contracts is at offset 1)
+    let contracts_map_slot = U256::from_be_bytes(GAS_STATION_STORAGE_LOCATION.0) + U256::from(1);
 
-    // contracts mapping position within the struct
-    let contracts_field_index = U256::from(1u64);
+    // Calculate the base slot for the struct entry in the mapping
+    // Left-pad the address to 32 bytes and combine with the map slot
+    let mut key_padded = [0u8; 32];
+    key_padded[12..].copy_from_slice(registered_contract_address.as_slice()); // Left-pad 20-byte address to 32 bytes
+    
+    // Left-pad the map slot to 32 bytes (Go: common.LeftPadBytes(contractsMapSlot.Bytes(), 32))
+    let map_slot_padded = contracts_map_slot.to_be_bytes::<32>();
+    
+    // Combine: key first, then map slot (Go: append(keyPadded, mapSlotPadded...))
+    let combined = [key_padded, map_slot_padded].concat();
+    let struct_base_slot_hash = keccak256(combined);
 
-    // Step 1.derive the slot representing `contracts`.
-    let mut buf = [0u8; 64];
-    // – keccak256(abi.encode(field_index, storage_location))
-    buf[..32].copy_from_slice(B256::from(contracts_field_index).as_slice()); // add field_index to buf
-    buf[32..].copy_from_slice(gas_station_storage_location.as_slice()); // add storage_location to buf
-    let contracts_slot = keccak256(buf); // hash it
+    // Calculate subsequent slots by adding offsets to the base slot hash
+    // New struct layout: bool registered, bool active, address admin (all packed in slot 0)
+    // uint256 credits (slot 1), bool whitelistEnabled (slot 2), mapping whitelist (slot 3)
+    // bool singleUseEnabled (slot 4), mapping usedAddresses (slot 5)
+    let struct_base_slot_u256 = U256::from_be_bytes(struct_base_slot_hash.0);
 
-    // Step 2. derive the slot for key `to` in the `contracts` mapping.
-    let mut elem_buf = [0u8; 64];
-    // left-pad address to 32 bytes
-    elem_buf[12..32].copy_from_slice(to.as_slice());
-    elem_buf[32..].copy_from_slice(contracts_slot.as_slice());
-    let contract_slot = keccak256(elem_buf);
+    // Slot for 'credits' (offset 1 from base - after the packed bools and address)
+    let credits_slot_u256 = struct_base_slot_u256 + U256::from(1);
+    let credit_slot_hash = B256::from_slice(&credits_slot_u256.to_be_bytes::<32>());
 
-    // fields of GaslessContract layout (packed sequentially starting at contract_slot):
-    // 0: bool registered
-    // 1: bool active
-    // 2: address admin
-    // 3: uint256 credits
-    // 4: bool whitelistEnabled
-    // 5: mapping(address => bool) whitelist (slot index 5)
-    // 6: bool singleUseEnabled
-    // 7: mapping(address => bool) usedAddresses (slot index 7)
-    // Note: Booleans may be bit-packed but solidity puts each bool in its own slot when followed by mappings.
+    // Slot for 'whitelistEnabled' (offset 2 from base)
+    let whitelist_enabled_slot_u256 = struct_base_slot_u256 + U256::from(2);
+    let whitelist_enabled_slot_hash = B256::from_slice(&whitelist_enabled_slot_u256.to_be_bytes::<32>());
 
-    // Step 3. derive the slots for the fields of GaslessContract.
-    let registered_slot = contract_slot;
-    let active_slot = add_u64_to_b256(contract_slot, 1);
-    let admin_slot = add_u64_to_b256(contract_slot, 2);
-    let credits_slot = add_u64_to_b256(contract_slot, 3);
-    let whitelist_enabled_slot = add_u64_to_b256(contract_slot, 4);
-    let whitelist_mapping_slot = add_u64_to_b256(contract_slot, 5);
-    let single_use_enabled_slot = add_u64_to_b256(contract_slot, 6);
-    let used_addresses_mapping_slot = add_u64_to_b256(contract_slot, 7);
+    // Base slot for the nested 'whitelist' mapping (offset 3 from base)
+    let nested_whitelist_map_base_slot_u256 = struct_base_slot_u256 + U256::from(3);
+    let nested_whitelist_map_base_slot_hash = B256::from_slice(&nested_whitelist_map_base_slot_u256.to_be_bytes::<32>());
 
-    // Step 4. If `from` provided, compute nested mapping keys
-    let whitelist_user_slot = from.map(|addr| {
-        let mut buf = [0u8; 64];
-        buf[12..32].copy_from_slice(addr.as_slice());
-        buf[32..].copy_from_slice(whitelist_mapping_slot.as_slice());
-        keccak256(buf)
-    });
-    let used_addresses_user_slot = from.map(|addr| {
-        let mut buf = [0u8; 64];
-        buf[12..32].copy_from_slice(addr.as_slice());
-        buf[32..].copy_from_slice(used_addresses_mapping_slot.as_slice());
-        keccak256(buf)
-    });
+    // Slot for 'singleUseEnabled' (offset 4 from base)
+    let single_use_enabled_slot_u256 = struct_base_slot_u256 + U256::from(4);
+    let single_use_enabled_slot_hash = B256::from_slice(&single_use_enabled_slot_u256.to_be_bytes::<32>());
 
-    // Step 5. return the slots
+    // Base slot for the nested 'usedAddresses' mapping (offset 5 from base)
+    let used_addresses_map_base_slot_u256 = struct_base_slot_u256 + U256::from(5);
+    let used_addresses_map_base_slot_hash = B256::from_slice(&used_addresses_map_base_slot_u256.to_be_bytes::<32>());
+
     GasStationStorageSlots {
-        contracts_slot,
-        contract_slot,
-        registered_slot,
-        active_slot,
-        admin_slot,
-        credits_slot,
-        whitelist_enabled_slot,
-        single_use_enabled_slot,
-        whitelist_user_slot,
-        used_addresses_user_slot,
+        registered_slot: struct_base_slot_hash,
+        active_slot: struct_base_slot_hash,  // Same slot, different packed fields
+        credits_slot: credit_slot_hash,
+        whitelist_enabled_slot: whitelist_enabled_slot_hash,
+        single_use_enabled_slot: single_use_enabled_slot_hash,
+        nested_whitelist_map_base_slot: nested_whitelist_map_base_slot_hash,
+        used_addresses_map_base_slot: used_addresses_map_base_slot_hash,
     }
+}
+
+/// Computes the storage slot hash for a nested mapping
+pub fn calculate_nested_mapping_slot(key: Address, base_slot: B256) -> B256 {
+    // Left-pad the address to 32 bytes
+    let mut key_padded = [0u8; 32];
+    key_padded[12..].copy_from_slice(key.as_slice()); // Left-pad 20-byte address to 32 bytes
+    
+    // The base_slot is already 32 bytes (B256)
+    let map_base_slot_padded = base_slot.0;
+    
+    // Combine: key first, then base slot
+    let combined = [key_padded, map_base_slot_padded].concat();
+    keccak256(combined)
 }
 
 #[derive(Clone, Debug)]
@@ -194,7 +181,6 @@ impl PendingCreditUsageProvider for PendingCreditUsageMap {
 pub fn validate_gasless_tx<SP: StateProvider>(
     cfg: &GasStationConfig,
     state: &SP,
-    gas_station_storage_location: B256,
     to: Address,
     from: Address,
     gas_limit: u64,
@@ -208,7 +194,7 @@ pub fn validate_gasless_tx<SP: StateProvider>(
     }
 
     // 1. compute slots
-    let slots = calculate_slots(gas_station_storage_location, to, Some(from));
+    let slots = calculate_gas_station_slots(to);
 
     // 2. read a storage slot
     // - helper to read a storage slot at gas station address
@@ -216,7 +202,8 @@ pub fn validate_gasless_tx<SP: StateProvider>(
         |slot: B256| -> Option<U256> { state.storage(cfg.address, slot.into()).ok().flatten() };
 
     //  -> read GaslessContract.registered
-    let registered = read_slot(slots.registered_slot).unwrap_or_default() != U256::ZERO;
+    let registered_slot = read_slot(slots.registered_slot);
+    let registered = registered_slot.unwrap_or_default() != U256::ZERO;
     if !registered {
         return Err(GaslessValidationError::NotRegistered);
     }
@@ -249,13 +236,9 @@ pub fn validate_gasless_tx<SP: StateProvider>(
     let whitelist_enabled =
         read_slot(slots.whitelist_enabled_slot).unwrap_or_default() != U256::ZERO;
     if whitelist_enabled {
-        // basically read whitelist[from] and check if it's true
-        let ok = slots
-            .whitelist_user_slot
-            .and_then(|s| read_slot(s))
-            .map(|v| v != U256::ZERO)
-            .unwrap_or(false);
-        if !ok {
+        let whitelist_slot = calculate_nested_mapping_slot(from, slots.nested_whitelist_map_base_slot);
+        let whitelist_status = read_slot(whitelist_slot).unwrap_or_default() != U256::ZERO;
+        if !whitelist_status {
             return Err(GaslessValidationError::NotWhitelisted);
         }
     }
@@ -264,12 +247,9 @@ pub fn validate_gasless_tx<SP: StateProvider>(
     let single_use_enabled =
         read_slot(slots.single_use_enabled_slot).unwrap_or_default() != U256::ZERO;
     if single_use_enabled {
-        let used = slots
-            .used_addresses_user_slot
-            .and_then(|s| read_slot(s))
-            .map(|v| v != U256::ZERO)
-            .unwrap_or(false);
-        if used {
+        let used_addresses_slot = calculate_nested_mapping_slot(from, slots.used_addresses_map_base_slot);
+        let used_addresses_status = read_slot(used_addresses_slot).unwrap_or_default() != U256::ZERO;
+        if used_addresses_status {
             return Err(GaslessValidationError::SingleUseConsumed);
         }
     }
@@ -286,28 +266,97 @@ pub fn encode_credits_used_log_data(gas_used: U256, credits_deducted: U256) -> [
     out
 }
 
-/// Add a small u64 delta to a B256 interpreted as a big endian integer.
-/// TODO: VERIFY THIS IS CORRECT.
-/// In future we should use https://crates.io/crates/num ???
-fn add_u64_to_b256(value: B256, delta: u64) -> B256 {
-    if delta == 0 {
-        return value;
+/// Represents the storage/log effects that should be applied after a successful gasless tx.
+#[derive(Clone, Debug, Default)]
+pub struct GaslessPostExecEffects {
+    /// Keyed by storage slot hash. Values are raw U256 slot values to write.
+    pub storage_writes: Vec<(B256, U256)>,
+    /// Optional log to emit: `CreditsUsed(address,address,uint256,uint256)`.
+    pub log: Option<Log>,
+}
+
+/// Computes the post-execution effects for a gasless transaction:
+/// - Deducts `gas_used` from the contract's credits (saturating at 0)
+/// - If single-use is enabled, marks `from` as used in `usedAddresses` mapping
+/// - Prepares a `CreditsUsed` log
+///
+/// This is a pure function that only depends on a read accessor for current storage values and
+/// returns the necessary writes and the log to emit. The caller is responsible for applying the
+/// writes to the execution state and attaching the log to the transaction receipt.
+pub fn compute_gasless_post_exec_effects(
+    cfg: &GasStationConfig,
+    gas_station_storage_location: B256,
+    to: Address,
+    from: Address,
+    gas_used: u64,
+    mut read_slot: impl FnMut(B256) -> U256,
+) -> GaslessPostExecEffects {
+    // If feature is disabled or address not configured, produce no-op effects.
+    if !cfg.enabled || cfg.address.is_zero() {
+        return GaslessPostExecEffects::default();
     }
-    let mut bytes = [0u8; 32];
-    bytes.copy_from_slice(value.as_slice());
-    // add delta in big endian
-    let mut i = 31usize;
-    let mut carry = delta as u128; // up to 64 bits fits into u128
-    while carry > 0 && i < 32 {
-        let sum = bytes[i] as u128 + (carry & 0xFF);
-        bytes[i] = (sum & 0xFF) as u8;
-        carry = (carry >> 8) + (sum >> 8);
-        if i == 0 {
-            break;
-        }
-        i -= 1;
+
+    // Derive all relevant slots for this (to, from) pair.
+    let slots = calculate_gas_station_slots(to);
+
+    // Read current credits and compute the deduction (saturating at 0).
+    let available_credits = read_slot(slots.credits_slot);
+    let gas_used_u256 = U256::from(gas_used);
+    let new_credits = available_credits.saturating_sub(gas_used_u256);
+
+    // Check if single-use is enabled.
+    let single_use_enabled = read_slot(slots.single_use_enabled_slot) != U256::ZERO;
+
+    // Prepare storage writes
+    let mut storage_writes = Vec::with_capacity(2);
+    storage_writes.push((slots.credits_slot, new_credits));
+
+    if single_use_enabled {
+        let used_addresses_slot = calculate_nested_mapping_slot(from, slots.used_addresses_map_base_slot);
+        storage_writes.push((used_addresses_slot, U256::from(1u64)));
     }
-    B256::from(bytes)
+
+    // calculate log data
+    // event CreditsUsed(
+    //     address indexed contractAddress, address indexed caller, uint256 gasUsed, uint256 creditsDeducted
+    // );
+    // topics: [signature, indexed contractAddress, indexed caller]
+    let topic0 = credits_used_topic0();
+    let to_bytes = to.into_word();
+    let from_bytes = from.into_word();
+    let topics = vec![topic0, to_bytes, from_bytes];
+    let data = encode_credits_used_log_data(gas_used_u256, gas_used_u256);
+
+    let log = Log::new_unchecked(
+        cfg.address,
+        topics,
+        Bytes::copy_from_slice(&data),
+    );
+
+    GaslessPostExecEffects { storage_writes, log: Some(log) }
+}
+
+/// A minimal writer trait to apply storage writes returned by
+/// `compute_gasless_post_exec_effects`.
+pub trait StorageWriter {
+    /// Writes a storage value for `account` at `slot`.
+    fn write_storage(&mut self, account: Address, slot: B256, value: U256);
+}
+
+/// Applies the post-execution effects to the provided writer and returns the prepared log.
+///
+/// This is a convenience helper: callers that can directly write to EVM state can implement
+/// `StorageWriter` and invoke this to update credits/mark single-use, then attach the returned
+/// log to the transaction receipt.
+pub fn apply_gasless_post_exec<W: StorageWriter>(
+    writer: &mut W,
+    cfg: &GasStationConfig,
+    effects: GaslessPostExecEffects,
+) -> Option<Log> {
+    for (slot, value) in effects.storage_writes {
+        writer.write_storage(cfg.address, slot, value);
+    }
+    effects.log
 }
 
 // ???
@@ -319,22 +368,5 @@ mod tests {
     fn topic0_signature_hash() {
         let t = credits_used_topic0();
         assert_eq!(t, keccak256(b"CreditsUsed(address,address,uint256,uint256)"));
-    }
-
-    #[test]
-    fn add_delta_to_b256() {
-        let base = B256::ZERO;
-        assert_eq!(add_u64_to_b256(base, 0), base);
-        assert_eq!(
-            add_u64_to_b256(base, 1),
-            B256::from_slice(&[0u8; 31].iter().cloned().chain([1u8]).collect::<Vec<_>>())
-        );
-        let max_low =
-            B256::from_slice(&[0u8; 24].iter().cloned().chain([0xFFu8; 8]).collect::<Vec<_>>());
-        let res = add_u64_to_b256(max_low, 1);
-        // expect carry into next byte
-        let mut expect = [0u8; 32];
-        expect[23] = 1;
-        assert_eq!(res, B256::from(expect));
     }
 }
