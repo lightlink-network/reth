@@ -714,7 +714,6 @@ where
                 if let Err(_e) = validate_gasless_tx(
                     &gas_cfg,
                     state_provider,
-                    GAS_STATION_STORAGE_LOCATION,
                     to,
                     from,
                     gas_limit,
