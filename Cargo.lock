@@ -8558,6 +8558,7 @@ dependencies = [
  "alloy-rlp",
  "hex",
  "reth-storage-api",
+ "revm-database",
  "thiserror 2.0.15",
 ]
 
