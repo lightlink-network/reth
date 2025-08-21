@@ -28,7 +28,7 @@ impl Default for GasStationConfig {
     fn default() -> Self {
         // Set it as disabled by default
         // TODO: make it enabled by default?? idk.
-        Self { enabled: false, address: GAS_STATION_PREDEPLOY }
+        Self { enabled: true, address: GAS_STATION_PREDEPLOY }
     }
 }
 
