@@ -2,9 +2,9 @@
 // CalculateGasStationStorageSlots -> calculate_slots
 // ValidateGaslessTx -> validate_gasless_tx
 
-use alloy_primitives::{address, b256, keccak256, Address, B256, Bytes, Log, U256};
-use reth_storage_api::{errors::ProviderResult, StateProvider, StateWriter};
-use revm_database::states::{PlainStorageChangeset, StateChangeset};
+use alloy_primitives::{address, b256, keccak256, Address, B256, U256};
+use reth_storage_api::StateProvider;
+use reth_primitives_traits::transaction::gasless_error::GaslessValidationError;
 
 #[derive(Clone, Debug)] // lets us clone (.clone()) and print debug info ("{:?}")
 pub struct GasStationConfig {
@@ -12,14 +12,11 @@ pub struct GasStationConfig {
     pub address: Address,
 }
 
-// pub const CREDITS_USED_TOPIC0: B256 = keccak256(b"CreditsUsed(address,address,uint256,uint256)");
-
 /// Topic0 for CreditsUsed event.
 pub fn credits_used_topic0() -> B256 {
     // GUESS WE CAN PRECOMPUTE THIS AND HAVE IT A CONSTANT
     keccak256(b"CreditsUsed(address,address,uint256,uint256)")
 }
-
 
 /// predeploy local for GasStation by default
 pub const GAS_STATION_PREDEPLOY: Address = address!("0x4300000000000000000000000000000000000001");
@@ -123,26 +120,6 @@ pub struct GaslessValidation {
     pub available_credits: U256,
     pub required_credits: U256,
     pub slots: GasStationStorageSlots,
-}
-
-#[derive(thiserror::Error, Clone, Debug)]
-pub enum GaslessValidationError {
-    #[error("gas station feature disabled")]
-    Disabled,
-    #[error("destination is create transaction")]
-    Create,
-    #[error("gas station contract not configured")]
-    NoAddress,
-    #[error("not registered for gasless")]
-    NotRegistered,
-    #[error("contract inactive for gasless")]
-    Inactive,
-    #[error("insufficient credits: have {available}, need {needed}")]
-    InsufficientCredits { available: U256, needed: U256 },
-    #[error("whitelist required")]
-    NotWhitelisted,
-    #[error("single-use already used")]
-    SingleUseConsumed,
 }
 
 /// A provider of pending credit usage, ... used by the txpool.
@@ -265,117 +242,6 @@ pub fn encode_credits_used_log_data(gas_used: U256, credits_deducted: U256) -> [
     out
 }
 
-/// Represents the storage/log effects that should be applied after a successful gasless tx.
-#[derive(Clone, Debug, Default)]
-pub struct GaslessPostExecEffects {
-    /// Keyed by storage slot hash. Values are raw U256 slot values to write.
-    pub storage_writes: Vec<(B256, U256)>,
-    /// Optional log to emit: `CreditsUsed(address,address,uint256,uint256)`.
-    pub log: Option<Log>,
-}
-
-/// Computes the post-execution effects for a gasless transaction:
-/// - Deducts `gas_used` from the contract's credits (saturating at 0)
-/// - If single-use is enabled, marks `from` as used in `usedAddresses` mapping
-/// Returns a struct with the storage writes and the log to emit.
-/// 
-/// NOTE: DOESNT ACTUALLY APPLY CHANGES!!!!
-/// see `apply_gasless_post_exec`...
-pub fn compute_gasless_post_exec_effects<SP: StateProvider>(
-    cfg: &GasStationConfig,
-    to: Address,
-    from: Address,
-    gas_used: u64,
-    state: &SP,
-) -> GaslessPostExecEffects {
-    // If feature is disabled or address not configured, produce no-op effects.
-    if !cfg.enabled || cfg.address.is_zero() {
-        return GaslessPostExecEffects::default();
-    }
-
-    // - helper to read a storage slot at gas station address
-    let read_slot =
-        |slot: B256| -> Option<U256> { state.storage(cfg.address, slot.into()).ok().flatten() };
-
-    let slots = calculate_gas_station_slots(to);
-
-    // Calculate new credits
-    let available_credits = read_slot(slots.credits_slot);
-    let gas_used_u256 = U256::from(gas_used);
-    let new_credits = available_credits.unwrap_or_default().saturating_sub(gas_used_u256); // saturating means if it goes below 0, it stays at 0, no underflow
-    
-    // Prepare storage writes
-    let mut storage_writes = Vec::with_capacity(2);
-    storage_writes.push((slots.credits_slot, new_credits));
-    
-    // - if single use mark it as used
-    let single_use_enabled = read_slot(slots.single_use_enabled_slot).unwrap_or_default() != U256::ZERO;
-    if single_use_enabled {
-        let used_addresses_slot = calculate_nested_mapping_slot(from, slots.used_addresses_map_base_slot);
-        storage_writes.push((used_addresses_slot, U256::from(1u64)));
-    }
-
-    // calculate log data
-    // event CreditsUsed(
-    //     address indexed contractAddress, address indexed caller, uint256 gasUsed, uint256 creditsDeducted
-    // );
-    // topics: [signature, indexed contractAddress, indexed caller]
-    let topic0 = credits_used_topic0();
-    let to_bytes = to.into_word();
-    let from_bytes = from.into_word();
-    let topics = vec![topic0, to_bytes, from_bytes];
-    let data = encode_credits_used_log_data(gas_used_u256, gas_used_u256);
-
-    let log = Log::new_unchecked(
-        cfg.address,
-        topics,
-        Bytes::copy_from_slice(&data),
-    );
-
-    GaslessPostExecEffects { storage_writes, log: Some(log) }
-}
-
-
-/// Applies the post-execution effects to the provided writer and returns the prepared log.
-///
-/// This is a convenience helper: callers that can directly write to EVM state can implement
-/// `StorageWriter` and invoke this to update credits/mark single-use, then attach the returned
-/// log to the transaction receipt.
-pub fn apply_gasless_post_exec<W: StateWriter>(
-    writer: &mut W,
-    cfg: &GasStationConfig,
-    effects: GaslessPostExecEffects,
-) -> ProviderResult<()> {
-    // If no effects, just return early
-    if effects.storage_writes.is_empty() {
-        return Ok(());
-    }
-
-
-    // Convert storage writes to the format expected by PlainStorageChangeset
-    let storage: Vec<(U256, U256)> = effects.storage_writes
-        .into_iter()
-        .map(|(slot, value)| (U256::from_be_bytes(slot.0), value))
-        .collect();
-
-    // Create a single PlainStorageChangeset for the gas station address
-    let storage_changeset = PlainStorageChangeset {
-        address: cfg.address,
-        wipe_storage: false,
-        storage,
-    };
-
-    let changes = StateChangeset {
-        accounts: Default::default(),
-        storage: vec![storage_changeset],
-        contracts: Default::default(),
-    };
-
-    // Write the changes
-    writer.write_state_changes(changes)
-}
-
-// ???
 #[cfg(test)]
 mod tests {
     use super::*;

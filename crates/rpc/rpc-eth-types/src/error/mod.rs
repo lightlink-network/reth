@@ -785,6 +785,9 @@ impl From<InvalidTransactionError> for RpcInvalidTransactionError {
             InvalidTransactionError::FeeCapTooLow => Self::FeeCapTooLow,
             InvalidTransactionError::SignerAccountHasBytecode => Self::SenderNoEOA,
             InvalidTransactionError::GasLimitTooHigh => Self::GasLimitTooHigh,
+            InvalidTransactionError::GaslessValidationError(err) => {
+                Self::other(internal_rpc_err(err.to_string()))
+            }
         }
     }
 }
