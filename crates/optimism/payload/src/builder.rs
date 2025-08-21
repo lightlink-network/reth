@@ -706,13 +706,8 @@ where
                 };
                 let from = tx.signer();
                 let gas_limit = tx.gas_limit();
-                let mut gas_cfg = GasStationConfig::default();
-                // temporary enable gasless transactions 
-                // Idk where to put this config, it can be a run time flag???
-                gas_cfg.enabled = true;
-                gas_cfg.address = GAS_STATION_PREDEPLOY;
                 if let Err(_e) = validate_gasless_tx(
-                    &gas_cfg,
+                    &GasStationConfig::default(),
                     state_provider,
                     to,
                     from,

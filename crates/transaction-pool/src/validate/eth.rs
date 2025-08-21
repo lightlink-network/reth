@@ -41,6 +41,7 @@ use std::{
 };
 use tokio::sync::Mutex;
 use reth_gas_station::{validate_gasless_tx, GasStationConfig};
+use reth_primitives_traits::transaction::gasless_error::GaslessValidationError;
 
 /// Validator for Ethereum transactions.
 /// It is a [`TransactionValidator`] implementation that validates ethereum transaction.
@@ -683,7 +684,9 @@ where
                 None => {
                     return TransactionValidationOutcome::Invalid(
                         transaction,
-                        InvalidTransactionError::TxTypeNotSupported.into(), // TODO use a better error
+                        InvalidTransactionError::GaslessValidationError(
+                            GaslessValidationError::Create,
+                        ).into(),
                     );
                 }
             };
@@ -698,7 +701,7 @@ where
             ) {
                 return TransactionValidationOutcome::Invalid(
                     transaction,
-                    InvalidTransactionError::TxTypeNotSupported.into(), // TODO use a better error
+                    InvalidTransactionError::GaslessValidationError(err).into(),
                 );
             }
         }

@@ -8560,6 +8560,7 @@ dependencies = [
  "alloy-primitives",
  "alloy-rlp",
  "hex",
+ "reth-primitives-traits",
  "reth-storage-api",
  "revm-database",
  "thiserror 2.0.16",

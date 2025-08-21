@@ -2,6 +2,7 @@
 
 use crate::GotExpectedBoxed;
 use alloy_primitives::U256;
+use crate::transaction::gasless_error::GaslessValidationError;
 
 /// Represents error variants that can happen when trying to validate a transaction.
 #[derive(Debug, Clone, Eq, PartialEq, thiserror::Error)]
@@ -64,6 +65,11 @@ pub enum InvalidTransactionError {
     /// Thrown post Osaka if gas limit is too high.
     #[error("gas limit too high")]
     GasLimitTooHigh,
+
+    // Gasless errors
+    /// Thrown if the transaction is a gasless transaction and the validation fails.
+    #[error("gasless transaction validation failed")]
+    GaslessValidationError(GaslessValidationError),
 }
 
 /// Represents error variants that can happen when trying to convert a transaction to pooled

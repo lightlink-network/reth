@@ -15,6 +15,7 @@ alloy-rlp = { workspace = true }
 reth-storage-api = { workspace = true }
 thiserror = { workspace = true }
 revm-database.workspace = true
+reth-primitives-traits.workspace = true
 
 [dev-dependencies]
 hex = "0.4"
