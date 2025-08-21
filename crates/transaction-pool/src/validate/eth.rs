@@ -24,6 +24,7 @@ use alloy_eips::{
     eip7840::BlobParams,
 };
 use reth_chainspec::{ChainSpecProvider, EthChainSpec, EthereumHardforks};
+use reth_optimism_primitives::is_gasless;
 use reth_primitives_traits::{
     constants::MAX_TX_GAS_LIMIT_OSAKA, transaction::error::InvalidTransactionError, Block,
     GotExpected, SealedBlock,
@@ -39,6 +40,7 @@ use std::{
     time::Instant,
 };
 use tokio::sync::Mutex;
+use reth_gas_station::{validate_gasless_tx, GasStationConfig};
 
 /// Validator for Ethereum transactions.
 /// It is a [`TransactionValidator`] implementation that validates ethereum transaction.
@@ -688,6 +690,34 @@ where
                     // store the extracted blob
                     maybe_blob_sidecar = Some(sidecar);
                 }
+            }
+        }
+
+        // Validate gasless
+        if is_gasless(&transaction) {
+            let full_state = self.client.latest().unwrap();
+            let to = match transaction.to() {
+                Some(to) => *to,
+                None => {
+                    return TransactionValidationOutcome::Invalid(
+                        transaction,
+                        InvalidTransactionError::TxTypeNotSupported.into(), // TODO use a better error
+                    );
+                }
+            };
+
+            if let Err(err) = validate_gasless_tx(
+                &GasStationConfig::default(),
+                &full_state,
+                to.into(),
+                *transaction.sender_ref(),
+                transaction.gas_limit(),
+                None,
+            ) {
+                return TransactionValidationOutcome::Invalid(
+                    transaction,
+                    InvalidTransactionError::TxTypeNotSupported.into(), // TODO use a better error
+                );
             }
         }
 
