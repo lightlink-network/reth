@@ -21,8 +21,10 @@ use reth_evm::{
     ConfigureEvm, Database, Evm,
 };
 use reth_execution_types::ExecutionOutcome;
+use reth_gas_station::{validate_gasless_tx, GasStationConfig};
 use reth_optimism_evm::OpNextBlockEnvAttributes;
 use reth_optimism_forks::OpHardforks;
+use reth_optimism_primitives::is_gasless;
 use reth_optimism_primitives::{transaction::OpTransaction, ADDRESS_L2_TO_L1_MESSAGE_PASSER};
 use reth_optimism_txpool::{
     estimated_da_size::DataAvailabilitySized,
@@ -43,9 +45,7 @@ use reth_storage_api::{errors::ProviderError, StateProvider, StateProviderFactor
 use reth_transaction_pool::{BestTransactionsAttributes, PoolTransaction, TransactionPool};
 use revm::context::{Block, BlockEnv};
 use std::sync::Arc;
-use tracing::{info, debug, trace, warn};
-use reth_optimism_primitives::is_gasless;
-use reth_gas_station::{validate_gasless_tx, GasStationConfig, GAS_STATION_PREDEPLOY, GAS_STATION_STORAGE_LOCATION};
+use tracing::{debug, info, trace, warn};
 
 /// Optimism's payload builder
 #[derive(Debug, Clone)]
@@ -316,14 +316,14 @@ impl<Txs> OpBuilder<'_, Txs> {
                 .execute_best_transactions(&mut info, &mut builder, &state_provider, best_txs)?
                 .is_some()
             {
-                return Ok(BuildOutcomeKind::Cancelled)
+                return Ok(BuildOutcomeKind::Cancelled);
             }
 
             // check if the new payload is even more valuable
             // if fees are equal but we included any mempool transactions (e.g. gasless), still proceed
             if !ctx.is_better_payload(info.total_fees) && !info.included_any_mempool_tx {
                 // can skip building the block
-                return Ok(BuildOutcomeKind::Aborted { fees: info.total_fees })
+                return Ok(BuildOutcomeKind::Aborted { fees: info.total_fees });
             }
         }
 
@@ -606,7 +606,7 @@ where
             if sequencer_tx.value().is_eip4844() {
                 return Err(PayloadBuilderError::other(
                     OpPayloadBuilderError::BlobTransactionRejected,
-                ))
+                ));
             }
 
             // Convert the transaction to a [RecoveredTx]. This is
@@ -624,11 +624,11 @@ where
                     ..
                 })) => {
                     trace!(target: "payload_builder", %error, ?sequencer_tx, "Error in sequencer transaction, skipping.");
-                    continue
+                    continue;
                 }
                 Err(err) => {
                     // this is an error that we should treat as fatal for this attempt
-                    return Err(PayloadBuilderError::EvmExecutionError(Box::new(err)))
+                    return Err(PayloadBuilderError::EvmExecutionError(Box::new(err)));
                 }
             };
 
@@ -671,13 +671,13 @@ where
                 // invalid which also removes all dependent transaction from
                 // the iterator before we can continue
                 best_txs.mark_invalid(tx.signer(), tx.nonce());
-                continue
+                continue;
             }
 
             // A sequencer's block should never contain blob or deposit transactions from the pool.
             if tx.is_eip4844() || tx.is_deposit() {
                 best_txs.mark_invalid(tx.signer(), tx.nonce());
-                continue
+                continue;
             }
 
             // We skip invalid cross chain txs, they would be removed on the next block update in
@@ -685,14 +685,13 @@ where
             if let Some(interop) = interop {
                 if !is_valid_interop(interop, self.config.attributes.timestamp()) {
                     best_txs.mark_invalid(tx.signer(), tx.nonce());
-                    continue
+                    continue;
                 }
             }
             // check if the job was cancelled, if so we can exit early
             if self.cancel.is_cancelled() {
-                return Ok(Some(()))
+                return Ok(Some(()));
             }
-            
             // validate the gasless transaction
             if is_gasless(tx.as_ref()) {
                 // do we allow create transactions???
@@ -701,7 +700,7 @@ where
                     alloy_primitives::TxKind::Create => {
                         info!("gasless transaction is a create transaction, skipping");
                         best_txs.mark_invalid(tx.signer(), tx.nonce());
-                        continue
+                        continue;
                     }
                 };
                 let from = tx.signer();
@@ -716,7 +715,7 @@ where
                 ) {
                     info!("gasless transaction validation failed: {:?}", _e);
                     best_txs.mark_invalid(tx.signer(), tx.nonce());
-                    continue
+                    continue;
                 }
             }
 
@@ -735,11 +734,11 @@ where
                         trace!(target: "payload_builder", %error, ?tx, "skipping invalid transaction and its descendants");
                         best_txs.mark_invalid(tx.signer(), tx.nonce());
                     }
-                    continue
+                    continue;
                 }
                 Err(err) => {
                     // this is an error that we should treat as fatal for this attempt
-                    return Err(PayloadBuilderError::EvmExecutionError(Box::new(err)))
+                    return Err(PayloadBuilderError::EvmExecutionError(Box::new(err)));
                 }
             };
 
