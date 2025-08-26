@@ -419,7 +419,7 @@ where
                         transaction_gas_limit,
                         max_tx_gas_limit,
                     ),
-                ));
+                ))
             }
         }
 
@@ -451,7 +451,7 @@ where
                                 max_tx_fee_wei,
                                 tx_fee_cap_wei,
                             },
-                        ));
+                        ))
                     }
                 }
             }
@@ -538,7 +538,7 @@ where
                             permitted: max_blob_count,
                         },
                     ),
-                ));
+                ))
             }
         }
 
