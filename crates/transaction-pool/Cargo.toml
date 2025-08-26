@@ -15,6 +15,7 @@ workspace = true
 # reth
 reth-chain-state.workspace = true
 reth-ethereum-primitives.workspace = true
+reth-optimism-primitives.workspace = true
 reth-chainspec.workspace = true
 reth-eth-wire-types.workspace = true
 reth-primitives-traits.workspace = true
@@ -24,6 +25,7 @@ reth-storage-api.workspace = true
 reth-tasks.workspace = true
 revm-interpreter.workspace = true
 revm-primitives.workspace = true
+reth-gas-station.workspace = true
 
 # ethereum
 alloy-eips = { workspace = true, features = ["kzg"] }
@@ -88,6 +90,7 @@ serde = [
     "revm-primitives/serde",
     "reth-primitives-traits/serde",
     "reth-ethereum-primitives/serde",
+    "reth-optimism-primitives/serde",
     "reth-chain-state/serde",
     "reth-storage-api/serde",
 ]

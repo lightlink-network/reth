@@ -24,6 +24,7 @@ use alloy_eips::{
     eip7840::BlobParams,
 };
 use reth_chainspec::{ChainSpecProvider, EthChainSpec, EthereumHardforks};
+use reth_optimism_primitives::is_gasless;
 use reth_primitives_traits::{
     constants::MAX_TX_GAS_LIMIT_OSAKA, transaction::error::InvalidTransactionError, Block,
     GotExpected, SealedBlock,
@@ -39,6 +40,8 @@ use std::{
     time::Instant,
 };
 use tokio::sync::Mutex;
+use reth_gas_station::{validate_gasless_tx, GasStationConfig};
+use reth_primitives_traits::transaction::gasless_error::GaslessValidationError;
 
 /// Validator for Ethereum transactions.
 /// It is a [`TransactionValidator`] implementation that validates ethereum transaction.
@@ -437,19 +440,22 @@ where
         }
 
         // Drop non-local transactions with a fee lower than the configured fee for acceptance into
-        // the pool.
-        if !is_local &&
-            transaction.is_dynamic_fee() &&
-            transaction.max_priority_fee_per_gas() < self.minimum_priority_fee
-        {
-            return Err(TransactionValidationOutcome::Invalid(
-                transaction,
-                InvalidPoolTransactionError::PriorityFeeBelowMinimum {
-                    minimum_priority_fee: self
-                        .minimum_priority_fee
-                        .expect("minimum priority fee is expected inside if statement"),
-                },
-            ))
+        // the pool. Bypass for gasless transactions (legacy gas_price == 0 or 1559 caps == 0).
+        if !is_local && transaction.is_dynamic_fee() {
+            let is_gasless_1559 = transaction.max_fee_per_gas() == 0
+                && transaction.max_priority_fee_per_gas() == Some(0);
+            if !is_gasless_1559
+                && transaction.max_priority_fee_per_gas() < self.minimum_priority_fee
+            {
+                return Err(TransactionValidationOutcome::Invalid(
+                    transaction,
+                    InvalidPoolTransactionError::PriorityFeeBelowMinimum {
+                        minimum_priority_fee: self
+                            .minimum_priority_fee
+                            .expect("minimum priority fee is expected inside if statement"),
+                    },
+                ));
+            }
         }
 
         // Checks for chainid
@@ -667,6 +673,36 @@ where
                     // store the extracted blob
                     maybe_blob_sidecar = Some(sidecar);
                 }
+            }
+        }
+
+        // Validate gasless
+        if is_gasless(&transaction) {
+            let full_state = self.client.latest().unwrap();
+            let to = match transaction.to() {
+                Some(to) => *to,
+                None => {
+                    return TransactionValidationOutcome::Invalid(
+                        transaction,
+                        InvalidTransactionError::GaslessValidationError(
+                            GaslessValidationError::Create,
+                        ).into(),
+                    );
+                }
+            };
+
+            if let Err(err) = validate_gasless_tx(
+                &GasStationConfig::default(),
+                &full_state,
+                to.into(),
+                *transaction.sender_ref(),
+                transaction.gas_limit(),
+                None,
+            ) {
+                return TransactionValidationOutcome::Invalid(
+                    transaction,
+                    InvalidTransactionError::GaslessValidationError(err).into(),
+                );
             }
         }
 

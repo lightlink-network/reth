@@ -319,7 +319,11 @@ impl InvalidPoolTransactionError {
                     InvalidTransactionError::Eip7702Disabled => {
                         // settings
                         false
-                    }
+                    },
+                    InvalidTransactionError::GaslessValidationError(_) => {
+                        // gasless validation failed
+                        false
+                    },
                     InvalidTransactionError::OldLegacyChainId |
                     InvalidTransactionError::ChainIdMismatch |
                     InvalidTransactionError::GasUintOverflow |
