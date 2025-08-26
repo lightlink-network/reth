@@ -1,7 +1,3 @@
-// a rough port of https://github.com/lightlink-network/ll-geth/blob/5fc91fa5288a54b3761f43126655fc5e30923ab7/core/gas_station.go
-// CalculateGasStationStorageSlots -> calculate_slots
-// ValidateGaslessTx -> validate_gasless_tx
-
 use alloy_primitives::{address, b256, keccak256, Address, B256, U256};
 use reth_storage_api::StateProvider;
 use reth_primitives_traits::transaction::gasless_error::GaslessValidationError;
@@ -10,12 +6,6 @@ use reth_primitives_traits::transaction::gasless_error::GaslessValidationError;
 pub struct GasStationConfig {
     pub enabled: bool,
     pub address: Address,
-}
-
-/// Topic0 for CreditsUsed event.
-pub fn credits_used_topic0() -> B256 {
-    // GUESS WE CAN PRECOMPUTE THIS AND HAVE IT A CONSTANT
-    keccak256(b"CreditsUsed(address,address,uint256,uint256)")
 }
 
 /// predeploy local for GasStation by default
@@ -37,13 +27,20 @@ pub const GAS_STATION_STORAGE_LOCATION: B256 =
 /// and optional `from`.
 #[derive(Clone, Debug)]
 pub struct GasStationStorageSlots {
-    pub registered_slot: B256,  // struct base slot (has registered/active packed)
-    pub active_slot: B256,  // TODO REMOVE THIS
-    pub credits_slot: B256,     // credits slot
-    pub nested_whitelist_map_base_slot: B256,  // base slot for the nested whitelist mapping
-    pub whitelist_enabled_slot: B256,  // whitelist enabled flag
-    pub single_use_enabled_slot: B256,  // single use enabled flag  
-    pub used_addresses_map_base_slot: B256,  // base slot for the nested usedAddresses mapping
+    /// Struct base slot (has registered/active packed).
+    pub registered_slot: B256,
+    /// TODO REMOVE THIS.
+    pub active_slot: B256,
+    /// Slot for `credits` balance.
+    pub credits_slot: B256,
+    /// Base slot for nested `whitelist` mapping.
+    pub nested_whitelist_map_base_slot: B256,
+    /// Slot for `whitelistEnabled` flag.
+    pub whitelist_enabled_slot: B256,
+    /// Slot for `singleUseEnabled` flag.
+    pub single_use_enabled_slot: B256,
+    /// Base slot for nested `usedAddresses` mapping.
+    pub used_addresses_map_base_slot: B256,
 }
 
 /// calculates the storage slot hashes for a specific registered contract within the GasStation's `contracts` mapping.
@@ -92,7 +89,7 @@ pub fn calculate_gas_station_slots(registered_contract_address: Address) -> GasS
 
     GasStationStorageSlots {
         registered_slot: struct_base_slot_hash,
-        active_slot: struct_base_slot_hash,  
+        active_slot: struct_base_slot_hash,
         credits_slot: credit_slot_hash,
         whitelist_enabled_slot: whitelist_enabled_slot_hash,
         single_use_enabled_slot: single_use_enabled_slot_hash,
@@ -106,10 +103,10 @@ pub fn calculate_nested_mapping_slot(key: Address, base_slot: B256) -> B256 {
     // Left-pad the address to 32 bytes
     let mut key_padded = [0u8; 32];
     key_padded[12..].copy_from_slice(key.as_slice()); // Left-pad 20-byte address to 32 bytes
-    
+
     // The base_slot is already 32 bytes (B256)
     let map_base_slot_padded = base_slot.0;
-    
+
     // Combine: key first, then base slot
     let combined = [key_padded, map_base_slot_padded].concat();
     keccak256(combined)
@@ -231,24 +228,4 @@ pub fn validate_gasless_tx<SP: StateProvider>(
     }
 
     Ok(GaslessValidation { available_credits, required_credits: required, slots })
-}
-
-/// encodes the CreditsUsed event log data payload (topics are computed by caller).
-/// event CreditsUsed(address indexed contractAddress, address indexed caller, uint256 gasUsed, uint256 creditsDeducted)
-pub fn encode_credits_used_log_data(gas_used: U256, credits_deducted: U256) -> [u8; 64] {
-    let mut out = [0u8; 64];
-    out[..32].copy_from_slice(B256::from(gas_used).as_slice());
-    out[32..].copy_from_slice(B256::from(credits_deducted).as_slice());
-    out
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn topic0_signature_hash() {
-        let t = credits_used_topic0();
-        assert_eq!(t, keccak256(b"CreditsUsed(address,address,uint256,uint256)"));
-    }
 }
