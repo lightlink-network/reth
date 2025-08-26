@@ -323,20 +323,6 @@ impl TransactionSigned {
         keccak256(self.encoded_2718())
     }
 }
-impl TransactionSigned {
-    /// return true if the transaction is gasless as per the gas station spec.
-    /// i.e.
-    /// - legacy: gas_price == 0
-    /// - or 1559: max_fee_per_gas == 0 and max_priority_fee_per_gas == 0
-    pub fn is_gasless(&self) -> bool {
-        match &self.transaction {
-            Transaction::Legacy(tx) => tx.gas_price == 0,
-            Transaction::Eip1559(tx) => tx.max_fee_per_gas == 0 && tx.max_priority_fee_per_gas == 0,
-            // only legacy and 1559 are gasless so we return false for other types
-            _ => false, // <- matches all other types
-        }
-    }
-}
 
 impl Hash for TransactionSigned {
     fn hash<H: Hasher>(&self, state: &mut H) {
