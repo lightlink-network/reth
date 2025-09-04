@@ -23,7 +23,6 @@ use reth_execution_types::ExecutionOutcome;
 use reth_gas_station::{validate_gasless_tx, GasStationConfig};
 use reth_optimism_evm::OpNextBlockEnvAttributes;
 use reth_optimism_forks::OpHardforks;
-use reth_optimism_primitives::is_gasless;
 use reth_optimism_primitives::{transaction::OpTransaction, ADDRESS_L2_TO_L1_MESSAGE_PASSER};
 use reth_optimism_txpool::{
     estimated_da_size::DataAvailabilitySized,
