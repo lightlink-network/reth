@@ -21,7 +21,6 @@ use reth_evm::{
 };
 use reth_execution_types::ExecutionOutcome;
 use reth_gas_station::{validate_gasless_tx, GasStationConfig};
-use reth_optimism_evm::OpNextBlockEnvAttributes;
 use reth_optimism_forks::OpHardforks;
 use reth_optimism_primitives::{transaction::OpTransaction, ADDRESS_L2_TO_L1_MESSAGE_PASSER};
 use reth_optimism_txpool::{
@@ -45,7 +44,6 @@ use revm::context::{Block, BlockEnv};
 use std::{marker::PhantomData, sync::Arc};
 use tracing::{info, debug, trace, warn};
 use reth_optimism_primitives::is_gasless;
-use reth_gas_station::{validate_gasless_tx, GasStationConfig, GAS_STATION_PREDEPLOY, GAS_STATION_STORAGE_LOCATION};
 
 /// Optimism's payload builder
 #[derive(Debug)]
@@ -718,7 +716,7 @@ where
             }
 
             // validate the gasless transaction
-            if is_gasless(tx.as_ref()) {
+            if is_gasless(&*tx) {
                 // do we allow create transactions???
                 let to = match tx.kind() {
                     alloy_primitives::TxKind::Call(to) => to,
@@ -772,7 +770,7 @@ where
             info.cumulative_gas_used += gas_used;
             info.cumulative_da_bytes_used += tx_da_size;
 
-            if !is_gasless(tx.as_ref()) {
+            if !is_gasless(&*tx) {
                 // update add to total fees; gasless transactions pay no miner fee
                 let miner_fee = tx
                     .effective_tip_per_gas(base_fee)

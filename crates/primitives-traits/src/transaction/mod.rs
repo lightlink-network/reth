@@ -17,6 +17,7 @@ pub mod signed;
 
 pub mod error;
 pub mod recover;
+/// Gasless transaction validation errors.
 pub mod gasless_error;
 
 pub use alloy_consensus::transaction::{SignerRecoverable, TransactionInfo, TransactionMeta};
