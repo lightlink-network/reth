@@ -3,7 +3,7 @@ name: Docker Build Release
 on:
   push:
     branches:
-      - lightlink # Trigger the workflow on pushes to the main branch
+      - main # Trigger the workflow on pushes to the main branch
     tags:
       - "**" # Trigger the workflow on tags including hierarchical tags like v1.0/beta
   pull_request:
