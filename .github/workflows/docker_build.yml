@@ -62,7 +62,7 @@ jobs:
         uses: docker/metadata-action@v5
         id: meta
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: ghcr.io/${{ github.repository }}/op-reth
           labels: org.opencontainers.image.source=${{ github.repositoryUrl }}
           tags: |
             type=sha
