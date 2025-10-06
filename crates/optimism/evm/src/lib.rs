@@ -250,7 +250,9 @@ where
 
         let spec = revm_spec_by_timestamp_after_bedrock(self.chain_spec(), timestamp);
 
-        let cfg_env = CfgEnv::new().with_chain_id(self.chain_spec().chain().id()).with_spec(spec);
+        let mut cfg_env = CfgEnv::new().with_chain_id(self.chain_spec().chain().id()).with_spec(spec);
+        // Enable per-tx gasless validation bypass in lightlink revm
+        cfg_env.allow_gasless = true;
 
         let blob_excess_gas_and_price = spec
             .into_eth_spec()
