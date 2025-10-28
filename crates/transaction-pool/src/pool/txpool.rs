@@ -40,6 +40,7 @@ use std::{
     ops::Bound::{Excluded, Unbounded},
     sync::Arc,
 };
+use reth_optimism_primitives::is_gasless;
 use tracing::{trace, warn};
 
 #[cfg_attr(doc, aquamarine::aquamarine)]

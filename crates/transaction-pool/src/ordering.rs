@@ -84,7 +84,7 @@ where
         base_fee: u64,
     ) -> Priority<Self::PriorityValue> {
         if is_gasless(transaction) {
-            Priority::Value(U256::MAX)
+            Priority::Value(u128::MAX)
         } else {
             transaction.effective_tip_per_gas(base_fee).into()
         }
