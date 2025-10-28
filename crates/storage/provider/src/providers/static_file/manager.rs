@@ -18,7 +18,7 @@ use alloy_primitives::{
 use dashmap::DashMap;
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use parking_lot::RwLock;
-use reth_chainspec::{ChainInfo, ChainSpecProvider, EthChainSpec};
+use reth_chainspec::{ChainInfo, ChainSpecProvider, EthChainSpec, NamedChain};
 use reth_db::{
     lockfile::StorageLock,
     static_file::{
@@ -781,6 +781,16 @@ impl<N: NodePrimitives> StaticFileProvider<N> {
                 continue
             }
 
+            if segment.is_receipts() &&
+                (NamedChain::Gnosis == provider.chain_spec().chain_id() ||
+                    NamedChain::Chiado == provider.chain_spec().chain_id())
+            {
+                // Gnosis and Chiado's historical import is broken and does not work with this
+                // check. They are importing receipts along with importing
+                // headers/bodies.
+                continue;
+            }
+
             let initial_highest_block = self.get_highest_static_file_block(segment);
 
             //  File consistency is broken if:
@@ -940,12 +950,11 @@ impl<N: NodePrimitives> StaticFileProvider<N> {
                 }
             }
 
-            if let Some((db_last_entry, _)) = db_cursor.last()? {
-                if highest_static_file_entry
+            if let Some((db_last_entry, _)) = db_cursor.last()? &&
+                highest_static_file_entry
                     .is_none_or(|highest_entry| db_last_entry > highest_entry)
-                {
-                    return Ok(None)
-                }
+            {
+                return Ok(None)
             }
         }
 
@@ -1271,16 +1280,15 @@ impl<N: NodePrimitives> StaticFileProvider<N> {
             self.get_highest_static_file_block(segment)
         } else {
             self.get_highest_static_file_tx(segment)
-        } {
-            if block_or_tx_range.start <= static_file_upper_bound {
-                let end = block_or_tx_range.end.min(static_file_upper_bound + 1);
-                data.extend(fetch_from_static_file(
-                    self,
-                    block_or_tx_range.start..end,
-                    &mut predicate,
-                )?);
-                block_or_tx_range.start = end;
-            }
+        } && block_or_tx_range.start <= static_file_upper_bound
+        {
+            let end = block_or_tx_range.end.min(static_file_upper_bound + 1);
+            data.extend(fetch_from_static_file(
+                self,
+                block_or_tx_range.start..end,
+                &mut predicate,
+            )?);
+            block_or_tx_range.start = end;
         }
 
         if block_or_tx_range.end > block_or_tx_range.start {

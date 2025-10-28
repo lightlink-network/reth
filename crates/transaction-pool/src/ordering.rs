@@ -72,7 +72,7 @@ impl<T> TransactionOrdering for CoinbaseTipOrdering<T>
 where
     T: PoolTransaction + 'static,
 {
-    type PriorityValue = U256;
+    type PriorityValue = u128;
     type Transaction = T;
 
     /// Source: <https://github.com/ethereum/go-ethereum/blob/7f756dc1185d7f1eeeacb1d12341606b7135f9ea/core/txpool/legacypool/list.go#L469-L482>.
@@ -86,7 +86,7 @@ where
         if is_gasless(transaction) {
             Priority::Value(U256::MAX)
         } else {
-            transaction.effective_tip_per_gas(base_fee).map(U256::from).into()
+            transaction.effective_tip_per_gas(base_fee).into()
         }
     }
 }

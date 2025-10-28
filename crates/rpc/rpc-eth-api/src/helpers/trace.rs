@@ -2,7 +2,7 @@
 
 use super::{Call, LoadBlock, LoadPendingBlock, LoadState, LoadTransaction};
 use crate::FromEvmError;
-use alloy_consensus::BlockHeader;
+use alloy_consensus::{transaction::TxHashRef, BlockHeader};
 use alloy_primitives::B256;
 use alloy_rpc_types_eth::{BlockId, TransactionInfo};
 use futures::Future;
@@ -12,7 +12,7 @@ use reth_evm::{
     evm::EvmFactoryExt, system_calls::SystemCaller, tracing::TracingCtx, ConfigureEvm, Database,
     Evm, EvmEnvFor, EvmFor, HaltReasonFor, InspectorFor, TxEnvFor,
 };
-use reth_primitives_traits::{BlockBody, Recovered, RecoveredBlock, SignedTransaction};
+use reth_primitives_traits::{BlockBody, Recovered, RecoveredBlock};
 use reth_revm::{database::StateProviderDatabase, db::CacheDB};
 use reth_rpc_eth_types::{
     cache::db::{StateCacheDb, StateCacheDbRefMutWrapper, StateProviderTraitObjWrapper},
@@ -56,18 +56,21 @@ pub trait Trace: LoadState<Error: FromEvmError<Self::Evm>> {
         config: TracingInspectorConfig,
         at: BlockId,
         f: F,
-    ) -> Result<R, Self::Error>
+    ) -> impl Future<Output = Result<R, Self::Error>> + Send
     where
         Self: Call,
+        R: Send + 'static,
         F: FnOnce(
-            TracingInspector,
-            ResultAndState<HaltReasonFor<Self::Evm>>,
-        ) -> Result<R, Self::Error>,
+                TracingInspector,
+                ResultAndState<HaltReasonFor<Self::Evm>>,
+            ) -> Result<R, Self::Error>
+            + Send
+            + 'static,
     {
-        self.with_state_at_block(at, |state| {
+        self.with_state_at_block(at, move |this, state| {
             let mut db = CacheDB::new(StateProviderDatabase::new(state));
             let mut inspector = TracingInspector::new(config);
-            let res = self.inspect(&mut db, evm_env, tx_env, &mut inspector)?;
+            let res = this.inspect(&mut db, evm_env, tx_env, &mut inspector)?;
             f(inspector, res)
         })
     }
@@ -292,7 +295,7 @@ pub trait Trace: LoadState<Error: FromEvmError<Self::Evm>> {
             }
 
             // replay all transactions of the block
-            self.spawn_tracing(move |this| {
+            self.spawn_blocking_io_fut(move |this| async move {
                 // we need to get the state of the parent block because we're replaying this block
                 // on top of its parent block's state
                 let state_at = block.parent_hash();
@@ -302,7 +305,7 @@ pub trait Trace: LoadState<Error: FromEvmError<Self::Evm>> {
                 let base_fee = evm_env.block_env.basefee;
 
                 // now get the state
-                let state = this.state_at_block_id(state_at.into())?;
+                let state = this.state_at_block_id(state_at.into()).await?;
                 let mut db =
                     CacheDB::new(StateProviderDatabase::new(StateProviderTraitObjWrapper(&state)));
 

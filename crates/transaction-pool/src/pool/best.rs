@@ -130,12 +130,12 @@ impl<T: TransactionOrdering> BestTransactions<T> {
         loop {
             match self.new_transaction_receiver.as_mut()?.try_recv() {
                 Ok(tx) => {
-                    if let Some(last_priority) = &self.last_priority {
-                        if &tx.priority > last_priority {
-                            // we skip transactions if we already yielded a transaction with lower
-                            // priority
-                            return None
-                        }
+                    if let Some(last_priority) = &self.last_priority &&
+                        &tx.priority > last_priority
+                    {
+                        // we skip transactions if we already yielded a transaction with lower
+                        // priority
+                        return None
                     }
                     return Some(tx)
                 }
@@ -397,7 +397,6 @@ mod tests {
         test_utils::{MockOrdering, MockTransaction, MockTransactionFactory},
         BestTransactions, Priority,
     };
-    use alloy_primitives::U256;
 
     #[test]
     fn test_best_iter() {
@@ -668,7 +667,7 @@ mod tests {
         let pending_tx = PendingTransaction {
             submission_id: 10,
             transaction: Arc::new(valid_new_tx.clone()),
-            priority: Priority::Value(U256::from(1000)),
+            priority: Priority::Value(1000),
         };
         tx_sender.send(pending_tx.clone()).unwrap();
 
@@ -715,7 +714,7 @@ mod tests {
         let pending_tx1 = PendingTransaction {
             submission_id: 10,
             transaction: Arc::new(valid_new_tx1.clone()),
-            priority: Priority::Value(U256::from(1000)),
+            priority: Priority::Value(1000),
         };
         tx_sender.send(pending_tx1.clone()).unwrap();
 
@@ -738,7 +737,7 @@ mod tests {
         let pending_tx2 = PendingTransaction {
             submission_id: 11, // Different submission ID
             transaction: Arc::new(valid_new_tx2.clone()),
-            priority: Priority::Value(U256::from(1000)),
+            priority: Priority::Value(1000),
         };
         tx_sender.send(pending_tx2.clone()).unwrap();
 
@@ -984,7 +983,7 @@ mod tests {
         let pending_tx = PendingTransaction {
             submission_id: 10,
             transaction: Arc::new(valid_new_higher_fee_tx.clone()),
-            priority: Priority::Value(U256::from(u64::MAX)),
+            priority: Priority::Value(u128::MAX),
         };
         tx_sender.send(pending_tx).unwrap();
 

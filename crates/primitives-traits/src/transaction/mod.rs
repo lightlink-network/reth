@@ -20,7 +20,9 @@ pub mod recover;
 /// Gasless transaction validation errors.
 pub mod gasless_error;
 
-pub use alloy_consensus::transaction::{SignerRecoverable, TransactionInfo, TransactionMeta};
+pub use alloy_consensus::transaction::{
+    SignerRecoverable, TransactionInfo, TransactionMeta, TxHashRef,
+};
 
 use crate::{InMemorySize, MaybeCompact, MaybeSerde};
 use core::{fmt, hash::Hash};

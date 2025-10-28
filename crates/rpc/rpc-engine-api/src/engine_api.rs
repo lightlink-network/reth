@@ -21,15 +21,18 @@ use reth_chainspec::EthereumHardforks;
 use reth_engine_primitives::{ConsensusEngineHandle, EngineApiValidator, EngineTypes};
 use reth_payload_builder::PayloadStore;
 use reth_payload_primitives::{
-    validate_payload_timestamp, EngineApiMessageVersion, ExecutionPayload,
-    PayloadBuilderAttributes, PayloadOrAttributes, PayloadTypes,
+    validate_payload_timestamp, EngineApiMessageVersion, ExecutionPayload, PayloadOrAttributes,
+    PayloadTypes,
 };
 use reth_primitives_traits::{Block, BlockBody};
 use reth_rpc_api::{EngineApiServer, IntoEngineApiRpcModule};
 use reth_storage_api::{BlockReader, HeaderProvider, StateProviderFactory};
 use reth_tasks::TaskSpawner;
 use reth_transaction_pool::TransactionPool;
-use std::{sync::Arc, time::Instant};
+use std::{
+    sync::Arc,
+    time::{Instant, SystemTime},
+};
 use tokio::sync::oneshot;
 use tracing::{debug, trace, warn};
 
@@ -118,15 +121,12 @@ where
         Ok(vec![self.inner.client.clone()])
     }
 
-    /// Fetches the attributes for the payload with the given id.
-    async fn get_payload_attributes(
-        &self,
-        payload_id: PayloadId,
-    ) -> EngineApiResult<PayloadT::PayloadBuilderAttributes> {
+    /// Fetches the timestamp of the payload with the given id.
+    async fn get_payload_timestamp(&self, payload_id: PayloadId) -> EngineApiResult<u64> {
         Ok(self
             .inner
             .payload_store
-            .payload_attributes(payload_id)
+            .payload_timestamp(payload_id)
             .await
             .ok_or(EngineApiError::UnknownPayload)??)
     }
@@ -399,11 +399,9 @@ where
     where
         EngineT::BuiltPayload: TryInto<R>,
     {
-        // First we fetch the payload attributes to check the timestamp
-        let attributes = self.get_payload_attributes(payload_id).await?;
-
         // validate timestamp according to engine rules
-        validate_payload_timestamp(&self.inner.chain_spec, version, attributes.timestamp())?;
+        let timestamp = self.get_payload_timestamp(payload_id).await?;
+        validate_payload_timestamp(&self.inner.chain_spec, version, timestamp)?;
 
         // Now resolve the payload
         self.get_built_payload(payload_id).await?.try_into().map_err(|_| {
@@ -577,11 +575,10 @@ where
 
             // > Client software MUST NOT return trailing null values if the request extends past the current latest known block.
             // truncate the end if it's greater than the last block
-            if let Ok(best_block) = inner.provider.best_block_number() {
-                if end > best_block {
+            if let Ok(best_block) = inner.provider.best_block_number()
+                && end > best_block {
                     end = best_block;
                 }
-            }
 
             for num in start..=end {
                 let block_result = inner.provider.block(BlockHashOrNumber::Number(num));
@@ -758,6 +755,15 @@ where
         &self,
         versioned_hashes: Vec<B256>,
     ) -> EngineApiResult<Vec<Option<BlobAndProofV1>>> {
+        // Only allow this method before Osaka fork
+        let current_timestamp =
+            SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default().as_secs();
+        if self.inner.chain_spec.is_osaka_active_at_timestamp(current_timestamp) {
+            return Err(EngineApiError::EngineObjectValidationError(
+                reth_payload_primitives::EngineObjectValidationError::UnsupportedFork,
+            ));
+        }
+
         if versioned_hashes.len() > MAX_BLOB_LIMIT {
             return Err(EngineApiError::BlobRequestTooLarge { len: versioned_hashes.len() })
         }
@@ -793,6 +799,15 @@ where
         &self,
         versioned_hashes: Vec<B256>,
     ) -> EngineApiResult<Option<Vec<BlobAndProofV2>>> {
+        // Check if Osaka fork is active
+        let current_timestamp =
+            SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default().as_secs();
+        if !self.inner.chain_spec.is_osaka_active_at_timestamp(current_timestamp) {
+            return Err(EngineApiError::EngineObjectValidationError(
+                reth_payload_primitives::EngineObjectValidationError::UnsupportedFork,
+            ));
+        }
+
         if versioned_hashes.len() > MAX_BLOB_LIMIT {
             return Err(EngineApiError::BlobRequestTooLarge { len: versioned_hashes.len() })
         }

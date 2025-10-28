@@ -1,6 +1,6 @@
 [workspace.package]
-version = "1.6.0"
-edition = "2021"
+version = "1.8.2"
+edition = "2024"
 rust-version = "1.88"
 license = "MIT OR Apache-2.0"
 homepage = "https://paradigmxyz.github.io/reth"
@@ -77,6 +77,7 @@ members = [
     "crates/optimism/cli",
     "crates/optimism/consensus",
     "crates/optimism/evm/",
+    "crates/optimism/flashblocks/",
     "crates/optimism/hardforks/",
     "crates/optimism/node/",
     "crates/optimism/payload/",
@@ -161,6 +162,7 @@ members = [
     "examples/network-txpool/",
     "examples/network/",
     "examples/network-proxy/",
+    "examples/node-builder-api/",
     "examples/node-custom-rpc/",
     "examples/node-event-hooks/",
     "examples/op-db-access/",
@@ -171,6 +173,7 @@ members = [
     "examples/custom-beacon-withdrawals",
     "testing/ef-tests/",
     "testing/testing-utils",
+    "testing/runner",
     "crates/tracing-otlp",
 ]
 default-members = ["bin/reth"]
@@ -186,6 +189,7 @@ rust.missing_docs = "warn"
 rust.rust_2018_idioms = { level = "deny", priority = -1 }
 rust.unreachable_pub = "warn"
 rust.unused_must_use = "deny"
+rust.rust_2024_incompatible_pat = "warn"
 rustdoc.all = "warn"
 # rust.unnameable-types = "warn"
 
@@ -432,6 +436,7 @@ reth-rpc-engine-api = { path = "crates/rpc/rpc-engine-api" }
 reth-rpc-eth-api = { path = "crates/rpc/rpc-eth-api" }
 reth-rpc-eth-types = { path = "crates/rpc/rpc-eth-types", default-features = false }
 reth-rpc-layer = { path = "crates/rpc/rpc-layer" }
+reth-optimism-flashblocks = { path = "crates/optimism/flashblocks" }
 reth-rpc-server-types = { path = "crates/rpc/rpc-server-types" }
 reth-rpc-convert = { path = "crates/rpc/rpc-convert" }
 reth-stages = { path = "crates/stages/stages" }
@@ -458,79 +463,95 @@ reth-ress-protocol = { path = "crates/ress/protocol" }
 reth-ress-provider = { path = "crates/ress/provider" }
 
 # revm
-revm = { version = "28.0.1", default-features = false, features = ["optional_gasless"] }
-revm-bytecode = { version = "6.0.1", default-features = false }
-revm-database = { version = "7.0.1", default-features = false }
-revm-state = { version = "7.0.1", default-features = false }
-revm-primitives = { version = "20.0.0", default-features = false }
-revm-interpreter = { version = "23.0.1", default-features = false }
-revm-inspector = { version = "8.0.2", default-features = false }
-revm-context = { version = "9.0.1", default-features = false }
-revm-context-interface = { version = "8.0.1", default-features = false }
-revm-database-interface = { version = "7.0.1", default-features = false }
-op-revm = { version = "9.0.1", default-features = false }
-revm-inspectors = "0.28.0"
+revm = { version = "29.0.1", default-features = false, features = [
+    "optional_gasless",
+] }
+revm-bytecode = { version = "6.2.2", default-features = false }
+revm-database = { version = "7.0.5", default-features = false }
+revm-state = { version = "7.0.5", default-features = false }
+revm-primitives = { version = "20.2.1", default-features = false }
+revm-interpreter = { version = "25.0.3", default-features = false }
+revm-inspector = { version = "10.0.1", default-features = false }
+revm-context = { version = "9.1.0", default-features = false }
+revm-context-interface = { version = "10.2.0", default-features = false }
+revm-database-interface = { version = "7.0.5", default-features = false }
+op-revm = { version = "10.1.0", default-features = false }
+revm-inspectors = "0.30.0"
 
 # eth
 alloy-chains = { version = "0.2.5", default-features = false }
 alloy-dyn-abi = "1.3.1"
 alloy-eip2124 = { version = "0.2.0", default-features = false }
-alloy-evm = { version = "0.18.2", default-features = false }
-alloy-primitives = { version = "1.3.1", default-features = false, features = ["map-foldhash"] }
-alloy-rlp = { version = "0.3.10", default-features = false, features = ["core-net"] }
+alloy-evm = { version = "0.21.0", default-features = false }
+alloy-primitives = { version = "1.3.1", default-features = false, features = [
+    "map-foldhash",
+] }
+alloy-rlp = { version = "0.3.10", default-features = false, features = [
+    "core-net",
+] }
 alloy-sol-macro = "1.3.1"
 alloy-sol-types = { version = "1.3.1", default-features = false }
-alloy-trie = { version = "0.9.0", default-features = false }
+alloy-trie = { version = "0.9.1", default-features = false }
 
-alloy-hardforks = "0.2.7"
+alloy-hardforks = "0.3.5"
 
-alloy-consensus = { version = "1.0.23", default-features = false }
-alloy-contract = { version = "1.0.23", default-features = false }
-alloy-eips = { version = "1.0.23", default-features = false }
-alloy-genesis = { version = "1.0.23", default-features = false }
-alloy-json-rpc = { version = "1.0.23", default-features = false }
-alloy-network = { version = "1.0.23", default-features = false }
-alloy-network-primitives = { version = "1.0.23", default-features = false }
-alloy-provider = { version = "1.0.23", features = ["reqwest"], default-features = false }
-alloy-pubsub = { version = "1.0.23", default-features = false }
-alloy-rpc-client = { version = "1.0.23", default-features = false }
-alloy-rpc-types = { version = "1.0.23", features = ["eth"], default-features = false }
-alloy-rpc-types-admin = { version = "1.0.23", default-features = false }
-alloy-rpc-types-anvil = { version = "1.0.23", default-features = false }
-alloy-rpc-types-beacon = { version = "1.0.23", default-features = false }
-alloy-rpc-types-debug = { version = "1.0.23", default-features = false }
-alloy-rpc-types-engine = { version = "1.0.23", default-features = false }
-alloy-rpc-types-eth = { version = "1.0.23", default-features = false }
-alloy-rpc-types-mev = { version = "1.0.23", default-features = false }
-alloy-rpc-types-trace = { version = "1.0.23", default-features = false }
-alloy-rpc-types-txpool = { version = "1.0.23", default-features = false }
-alloy-serde = { version = "1.0.23", default-features = false }
-alloy-signer = { version = "1.0.23", default-features = false }
-alloy-signer-local = { version = "1.0.23", default-features = false }
-alloy-transport = { version = "1.0.23" }
-alloy-transport-http = { version = "1.0.23", features = ["reqwest-rustls-tls"], default-features = false }
-alloy-transport-ipc = { version = "1.0.23", default-features = false }
-alloy-transport-ws = { version = "1.0.23", default-features = false }
+alloy-consensus = { version = "1.0.37", default-features = false }
+alloy-contract = { version = "1.0.37", default-features = false }
+alloy-eips = { version = "1.0.37", default-features = false }
+alloy-genesis = { version = "1.0.37", default-features = false }
+alloy-json-rpc = { version = "1.0.37", default-features = false }
+alloy-network = { version = "1.0.37", default-features = false }
+alloy-network-primitives = { version = "1.0.37", default-features = false }
+alloy-provider = { version = "1.0.37", features = [
+    "reqwest",
+], default-features = false }
+alloy-pubsub = { version = "1.0.37", default-features = false }
+alloy-rpc-client = { version = "1.0.37", default-features = false }
+alloy-rpc-types = { version = "1.0.37", features = [
+    "eth",
+], default-features = false }
+alloy-rpc-types-admin = { version = "1.0.37", default-features = false }
+alloy-rpc-types-anvil = { version = "1.0.37", default-features = false }
+alloy-rpc-types-beacon = { version = "1.0.37", default-features = false }
+alloy-rpc-types-debug = { version = "1.0.37", default-features = false }
+alloy-rpc-types-engine = { version = "1.0.37", default-features = false }
+alloy-rpc-types-eth = { version = "1.0.37", default-features = false }
+alloy-rpc-types-mev = { version = "1.0.37", default-features = false }
+alloy-rpc-types-trace = { version = "1.0.37", default-features = false }
+alloy-rpc-types-txpool = { version = "1.0.37", default-features = false }
+alloy-serde = { version = "1.0.37", default-features = false }
+alloy-signer = { version = "1.0.37", default-features = false }
+alloy-signer-local = { version = "1.0.37", default-features = false }
+alloy-transport = { version = "1.0.37" }
+alloy-transport-http = { version = "1.0.37", features = [
+    "reqwest-rustls-tls",
+], default-features = false }
+alloy-transport-ipc = { version = "1.0.37", default-features = false }
+alloy-transport-ws = { version = "1.0.37", default-features = false }
 
 # op
-alloy-op-evm = { version = "0.18", default-features = false }
-alloy-op-hardforks = "0.2.2"
-op-alloy-rpc-types = { version = "0.18.12", default-features = false }
-op-alloy-rpc-types-engine = { version = "0.18.12", default-features = false }
-op-alloy-network = { version = "0.18.12", default-features = false }
-op-alloy-consensus = { version = "0.18.12", default-features = false }
-op-alloy-rpc-jsonrpsee = { version = "0.18.12", default-features = false }
+alloy-op-evm = { version = "0.21.0", default-features = false }
+alloy-op-hardforks = "0.3.5"
+op-alloy-rpc-types = { version = "0.20.0", default-features = false }
+op-alloy-rpc-types-engine = { version = "0.20.0", default-features = false }
+op-alloy-network = { version = "0.20.0", default-features = false }
+op-alloy-consensus = { version = "0.20.0", default-features = false }
+op-alloy-rpc-jsonrpsee = { version = "0.20.0", default-features = false }
 op-alloy-flz = { version = "0.13.1", default-features = false }
 
 # misc
 either = { version = "1.15.0", default-features = false }
 aquamarine = "0.6"
 auto_impl = "1"
-backon = { version = "1.2", default-features = false, features = ["std-blocking-sleep", "tokio-sleep"] }
+backon = { version = "1.2", default-features = false, features = [
+    "std-blocking-sleep",
+    "tokio-sleep",
+] }
 bincode = "1.3"
 bitflags = "2.4"
 boyer-moore-magiclen = "0.2.16"
 bytes = { version = "1.5", default-features = false }
+brotli = "8"
 cfg-if = "1.0"
 clap = "4"
 dashmap = "6.0"
@@ -546,9 +567,13 @@ itertools = { version = "0.14", default-features = false }
 linked_hash_set = "0.1"
 lz4 = "1.28.1"
 modular-bitfield = "0.11.2"
-notify = { version = "8.0.0", default-features = false, features = ["macos_fsevent"] }
+notify = { version = "8.0.0", default-features = false, features = [
+    "macos_fsevent",
+] }
 nybbles = { version = "0.4.2", default-features = false }
-once_cell = { version = "1.19", default-features = false, features = ["critical-section"] }
+once_cell = { version = "1.19", default-features = false, features = [
+    "critical-section",
+] }
 parking_lot = "0.12"
 paste = "1.0"
 rand = "0.9"
@@ -612,11 +637,11 @@ discv5 = "0.9"
 if-addrs = "0.13"
 
 # rpc
-jsonrpsee = "0.25.1"
-jsonrpsee-core = "0.25.1"
-jsonrpsee-server = "0.25.1"
-jsonrpsee-http-client = "0.25.1"
-jsonrpsee-types = "0.25.1"
+jsonrpsee = "0.26.0"
+jsonrpsee-core = "0.26.0"
+jsonrpsee-server = "0.26.0"
+jsonrpsee-http-client = "0.26.0"
+jsonrpsee-types = "0.26.0"
 
 # http
 http = "1.0"
@@ -628,12 +653,15 @@ proptest-arbitrary-interop = "0.1.0"
 # crypto
 enr = { version = "0.13", default-features = false }
 k256 = { version = "0.13", default-features = false, features = ["ecdsa"] }
-secp256k1 = { version = "0.30", default-features = false, features = ["global-context", "recovery"] }
+secp256k1 = { version = "0.30", default-features = false, features = [
+    "global-context",
+    "recovery",
+] }
 # rand 8 for secp256k1
 rand_08 = { package = "rand", version = "0.8" }
 
 # for eip-4844
-c-kzg = "2.1.1"
+c-kzg = "2.1.4"
 
 # config
 toml = "0.8"
@@ -663,7 +691,7 @@ snmalloc-rs = { version = "0.3.7", features = ["build_cc"] }
 aes = "0.8.1"
 ahash = "0.8"
 anyhow = "1.0"
-bindgen = { version = "0.70", default-features = false }
+bindgen = { version = "0.71", default-features = false }
 block-padding = "0.3.2"
 cc = "=1.2.15"
 cipher = "0.4.3"
@@ -711,17 +739,17 @@ walkdir = "2.3.3"
 vergen-git2 = "1.0.5"
 
 [patch.crates-io]
-revm = { git = "https://github.com/lightlink-network/revm", branch = "feat/gasless-2"}
+revm = { git = "https://github.com/lightlink-network/revm", branch = "feat/gasless-2" }
 revm-primitives = { git = "https://github.com/lightlink-network/revm", branch = "feat/gasless-2" }
-revm-interpreter = { git = "https://github.com/lightlink-network/revm", branch = "feat/gasless-2"}
+revm-interpreter = { git = "https://github.com/lightlink-network/revm", branch = "feat/gasless-2" }
 revm-handler = { git = "https://github.com/lightlink-network/revm", branch = "feat/gasless-2" }
-revm-context = { git = "https://github.com/lightlink-network/revm", branch = "feat/gasless-2"}
-revm-context-interface = { git = "https://github.com/lightlink-network/revm", branch = "feat/gasless-2"}
-revm-state = { git = "https://github.com/lightlink-network/revm", branch = "feat/gasless-2"}
-revm-database = { git = "https://github.com/lightlink-network/revm", branch = "feat/gasless-2"}
-revm-database-interface = { git = "https://github.com/lightlink-network/revm", branch = "feat/gasless-2"}
-revm-bytecode = { git = "https://github.com/lightlink-network/revm", branch = "feat/gasless-2"}
-revm-inspector = { git = "https://github.com/lightlink-network/revm", branch = "feat/gasless-2"}
+revm-context = { git = "https://github.com/lightlink-network/revm", branch = "feat/gasless-2" }
+revm-context-interface = { git = "https://github.com/lightlink-network/revm", branch = "feat/gasless-2" }
+revm-state = { git = "https://github.com/lightlink-network/revm", branch = "feat/gasless-2" }
+revm-database = { git = "https://github.com/lightlink-network/revm", branch = "feat/gasless-2" }
+revm-database-interface = { git = "https://github.com/lightlink-network/revm", branch = "feat/gasless-2" }
+revm-bytecode = { git = "https://github.com/lightlink-network/revm", branch = "feat/gasless-2" }
+revm-inspector = { git = "https://github.com/lightlink-network/revm", branch = "feat/gasless-2" }
 
 # [patch.crates-io]
 # alloy-consensus = { git = "https://github.com/alloy-rs/alloy", rev = "3049f232fbb44d1909883e154eb38ec5962f53a3" }
