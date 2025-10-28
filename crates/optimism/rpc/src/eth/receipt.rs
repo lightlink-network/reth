@@ -10,7 +10,8 @@ use reth_chainspec::ChainSpecProvider;
 use reth_node_api::NodePrimitives;
 use reth_optimism_evm::RethL1BlockInfo;
 use reth_optimism_forks::OpHardforks;
-use reth_optimism_primitives::OpReceipt;
+use reth_optimism_primitives::{is_gasless, OpReceipt};
+use reth_primitives_traits::Block;
 use reth_primitives_traits::SealedBlock;
 use reth_rpc_eth_api::{
     helpers::LoadReceipt,
@@ -303,9 +304,22 @@ impl OpReceiptBuilder {
             }
         });
 
-        let op_receipt_fields = OpReceiptFieldsBuilder::new(timestamp, block_number)
+        let mut op_receipt_fields = OpReceiptFieldsBuilder::new(timestamp, block_number)
             .l1_block_info(chain_spec, tx_signed, l1_block_info)?
             .build();
+
+            if is_gasless(tx_signed) {
+                    op_receipt_fields.l1_block_info.l1_base_fee_scalar = Some(0);
+                    op_receipt_fields.l1_block_info.l1_blob_base_fee_scalar = Some(0);
+                    op_receipt_fields.l1_block_info.operator_fee_scalar = Some(0);
+                    op_receipt_fields.l1_block_info.operator_fee_constant = Some(0);
+                    op_receipt_fields.l1_block_info.l1_gas_price = Some(0);
+                    op_receipt_fields.l1_block_info.l1_gas_used = Some(0);
+                    op_receipt_fields.l1_block_info.l1_fee = Some(0);
+                    op_receipt_fields.l1_block_info.l1_fee_scalar = None;
+                    op_receipt_fields.l1_block_info.l1_blob_base_fee = Some(0);
+                    op_receipt_fields.l1_block_info.l1_blob_base_fee_scalar = Some(0);
+            }
 
         Ok(Self { core_receipt, op_receipt_fields })
     }

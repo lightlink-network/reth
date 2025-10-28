@@ -1,4 +1,6 @@
 use crate::traits::PoolTransaction;
+use alloy_primitives::U256;
+use reth_optimism_primitives::is_gasless;
 use std::{cmp::Ordering, fmt::Debug, marker::PhantomData};
 
 /// Priority of the transaction that can be missing.
@@ -81,7 +83,11 @@ where
         transaction: &Self::Transaction,
         base_fee: u64,
     ) -> Priority<Self::PriorityValue> {
-        transaction.effective_tip_per_gas(base_fee).into()
+        if is_gasless(transaction) {
+            Priority::Value(u128::MAX)
+        } else {
+            transaction.effective_tip_per_gas(base_fee).into()
+        }
     }
 }
 

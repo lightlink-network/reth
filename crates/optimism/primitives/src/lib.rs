@@ -19,6 +19,9 @@ pub use predeploys::ADDRESS_L2_TO_L1_MESSAGE_PASSER;
 pub mod transaction;
 pub use transaction::*;
 
+pub mod utils;
+pub use utils::*;
+
 mod receipt;
 pub use receipt::{DepositReceipt, OpReceipt};
 
